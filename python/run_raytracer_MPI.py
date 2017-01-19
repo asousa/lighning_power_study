@@ -11,6 +11,7 @@ import commands
 import subprocess
 import shutil
 
+
 from index_helpers import load_TS_params
 from index_helpers import load_Dst
 from index_helpers import load_Kp
@@ -26,6 +27,14 @@ from bmodel_dipole import bmodel_dipole
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 host = commands.getoutput("hostname")
+print host
+if "cluster" in host:
+    host_num = int(host[-3:])
+elif "nansen" in host:
+    host_num = 0
+
+
+print "host: %s, host num: %d"%(host, host_num)
 nProcs = 1.0*comm.Get_size()
 
 
@@ -50,7 +59,7 @@ use_tsyg = 0    # Use the Tsyganenko magnetic field model corrections
 
 minalt   = (R_E + 150)*1e3 # cutoff threshold in meters
 
-dump_model = False
+dump_model = True
 run_rays   = False
 # # Band-aid parameters to use for lower frequencies:
 # maxerr_lowf = 1e-3
@@ -75,7 +84,7 @@ launch_alt = (R_E + 1000)*1e3
 freqs = [1000]
 # Simulation time
 # ray_datenum = dt.datetime(2010, 8, 01, 00, 00, 00);
-ray_datenum = dt.datetime(2001, 1, 2, 0, 0, 0);
+ray_datenum = dt.datetime(2010, 1, 6, 0, 0, 0);
 # Damping parameters:
 damp_mode = 1  # 0 for old 2d damping code, 1 for modern code
 
@@ -83,7 +92,7 @@ project_root = '/shared/users/asousa/WIPP/lightning_power_study/'
 raytracer_root = '/shared/users/asousa/software/raytracer_v1.17/'
 damping_root = '/shared/users/asousa/software/damping/'
 ray_bin_dir    = os.path.join(raytracer_root, 'bin')
-ray_out_dir = os.path.join(project_root, 'rays','globe_fullgcpm')
+ray_out_dir = os.path.join(project_root, 'rays','derg')
 
 # GCPM grid to use (plasmasphere model)
 if modelnum==1:
@@ -97,6 +106,41 @@ if modelnum==4:
     scattered_interp_order = 2
     scattered_interp_exact = 0
     scattered_interp_local_window_scale = 5
+
+
+# ------------ Load Kp, Dst, etc at this time -------------
+# Load solar wind parameters (for Tsykadenko corrections)
+# Pdyn, ByIMF, BzIMF, W = load_TS_params(ray_datenum)
+Pdyn = 0.984584
+ByIMF = 0.989923
+BzIMF = 2.49598
+W = np.zeros(6)
+
+# Load Dst
+Dst = load_Dst(ray_datenum)
+Dst = -6
+
+# Load Kp
+Kp = 4
+# Kp = Kp_at(ray_datenum)
+
+# Load Ae
+AE = 1
+# AE = Ae_at(ray_datenum)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -158,27 +202,7 @@ if rank==0:
 
 
 
-# ------------ Load Kp, Dst, etc at this time -------------
-# Load solar wind parameters (for Tsykadenko corrections)
-Pdyn, ByIMF, BzIMF, W = load_TS_params(ray_datenum)
-print W
-# Load Dst
-Dst = load_Dst(ray_datenum)
-# Dst = 0
 
-# Get closest Kp value (Or should we interpolate?)
-# tvec, kvec = load_Kp()
-# tt = bisect.bisect_left(tvec, ray_datenum)
-# Kp = kvec[tt]
-# Kp = 4
-Kp = Kp_at(ray_datenum)
-
-# Get closest AE value
-# tvec, avec = load_ae()
-# tt = bisect.bisect_left(tvec, ray_datenum)
-# AE = np.log10(avec[tt])
-# AE = 1
-AE = Ae_at(ray_datenum)
 
 
 yearday = '%d%03d'%(ray_datenum.year, ray_datenum.timetuple().tm_yday)
@@ -198,7 +222,11 @@ if rank == 0:
 time.sleep(5)
 comm.Barrier()
 
-working_path = "/tmp";
+working_path = os.path.join(os.path.expanduser("~"),"rayTmp")
+# working_path = "/tmp";
+
+# (if using full GCPM model, you need all the stupid data files in your working directory)
+os.chdir(working_path);
 
 # Each subprocess does a subset of frequencies
 if run_rays:
@@ -416,7 +444,7 @@ if (dump_model):
         print cmd
 
         os.system(cmd)
-
+        os.system('mv %s %s'%(model_outfile, os.path.join(ray_out_dir, model_outfile)))
 
 
 

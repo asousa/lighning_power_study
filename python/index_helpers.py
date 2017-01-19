@@ -138,6 +138,11 @@ def load_Kp(file = '/shared/users/asousa/WIPP/3dWIPP/data/Kp_1999_2016.dat'):
 
 
 def Kp_at(dt):
+    # closest value method:
+    # tvec, kvec = load_Kp()
+    # tt = bisect.bisect_left(tvec, ray_datenum)
+    # Kp = kvec[tt]
+
     tvec, kvec = load_Kp()
     Kp   = interp1d([datetime2matlabdn(t) for t in tvec], kvec).__call__(datetime2matlabdn(dt))
     return Kp
@@ -174,6 +179,11 @@ def load_ae(file = '/shared/users/asousa/WIPP/3dWIPP/data/DST_AE.dat', daily_avg
 
 
 def Ae_at(dt):
+    # Get closest AE value
+    # tvec, avec = load_ae()
+    # tt = bisect.bisect_left(tvec, ray_datenum)
+    # AE = np.log10(avec[tt])
+    
     tvec, avec = load_ae()
     Ae   = interp1d([datetime2matlabdn(t) for t in tvec], avec).__call__(datetime2matlabdn(dt))
     return np.log10(Ae)

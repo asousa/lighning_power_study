@@ -29,7 +29,9 @@ class xflib(object):
 
         self.s2c_l    = self.xf.pol_to_cart_d_
         self.c2s_l    = self.xf.cart_to_pol_d_
-    
+        
+        self.gse2sm_l = self.xf.gse_to_sm_d_
+        self.sm2gse_l = self.xf.sm_to_gse_d_
     
     def s2c(self, x_in):
         ''' spherical to cartesian (degrees)
@@ -195,6 +197,38 @@ class xflib(object):
         d_out = np.dot(M, d_in)
 
         return d_out
+
+
+    def gse2sm(self, x_in, time_in):
+        yearday = int(1000*time_in.year + time_in.timetuple().tm_yday)
+        milliseconds_day = int((time_in.second + time_in.minute*60 + time_in.hour*60*60)*1e3 + time_in.microsecond*1e-3)
+
+        ct_in = self.i2()
+        
+        ct_in[0] = yearday
+        ct_in[1] = milliseconds_day
+        
+        cx_in = self.d3(*x_in)
+        cx_out = self.d3()
+        self.gse2sm_l(ct_in, cx_in, cx_out)
+
+        return [x for x in cx_out]
+
+    def sm2gse(self, x_in, time_in):
+        yearday = int(1000*time_in.year + time_in.timetuple().tm_yday)
+        milliseconds_day = int((time_in.second + time_in.minute*60 + time_in.hour*60*60)*1e3 + time_in.microsecond*1e-3)
+
+        ct_in = self.i2()
+        
+        ct_in[0] = yearday
+        ct_in[1] = milliseconds_day
+        
+        cx_in = self.d3(*x_in)
+        cx_out = self.d3()
+        self.sm2gse_l(ct_in, cx_in, cx_out)
+
+        return [x for x in cx_out]
+
 
 # xf = xflib(lib_path='/shared/users/asousa/WIPP/3dWIPP/python/libxformd.so')
 
