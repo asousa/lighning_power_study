@@ -4,6 +4,7 @@ import os.path
 from scipy.interpolate import interp1d
 import datetime
 
+import bisect
 
 def load_TS_params(t, datapath = '/shared/users/asousa/software/vlf_matlabwork/indices/'):
     ''' Load values from the TS04 database files, and interpolate parameters'''
@@ -145,7 +146,7 @@ def Kp_at(dt):
 
     tvec, kvec = load_Kp()
     Kp   = interp1d([datetime2matlabdn(t) for t in tvec], kvec).__call__(datetime2matlabdn(dt))
-    return Kp
+    return round(100.*Kp)/100.0
 
 
 def load_ae(file = '/shared/users/asousa/WIPP/3dWIPP/data/DST_AE.dat', daily_avg = False):
@@ -181,9 +182,10 @@ def load_ae(file = '/shared/users/asousa/WIPP/3dWIPP/data/DST_AE.dat', daily_avg
 def Ae_at(dt):
     # Get closest AE value
     # tvec, avec = load_ae()
-    # tt = bisect.bisect_left(tvec, ray_datenum)
+    # tt = bisect.bisect_left(tvec, dt)
     # AE = np.log10(avec[tt])
-    
+    # return np.log10(AE)
+
     tvec, avec = load_ae()
     Ae   = interp1d([datetime2matlabdn(t) for t in tvec], avec).__call__(datetime2matlabdn(dt))
-    return np.log10(Ae)
+    return round(100.*np.log10(Ae))/100.0

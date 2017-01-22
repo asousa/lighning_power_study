@@ -67,13 +67,13 @@ clims = [-1, 5]
 
 sim_start = dt.datetime(2001, 01, 1, 0, 0, 0)
 sim_stop  = dt.datetime(2002, 01, 1, 0, 0, 0)
-sim_step  = dt.timedelta(days=1)
+sim_step  = dt.timedelta(hours=3)
 
 
 project_root = '/shared/users/asousa/WIPP/lightning_power_study/'
 raytracer_root = '/shared/users/asousa/software/raytracer_v1.17/'
 ray_bin_dir    = os.path.join(raytracer_root, 'bin')
-ray_out_dir = os.path.join(project_root, 'rays','model_dumps_2001')
+ray_out_dir = os.path.join(project_root, 'rays','model_dumps_2001_3hr')
 
 # GCPM grid to use (plasmasphere model)
 if modelnum==1:

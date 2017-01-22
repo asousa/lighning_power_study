@@ -43,7 +43,7 @@ R_E = 6371
 
 
 # -------------- Simulation params ---------------------
-t_max = 10.     # Maximum duration in seconds
+t_max = 30.     # Maximum duration in seconds
 
 dt0 = 1e-3      # Initial timestep in seconds
 dtmax = 1e-1    # Maximum allowable timestep in seconds
@@ -57,34 +57,34 @@ modelnum = 2    # Which model to use (1 = ngo, 2=GCPM, 3=GCPM interp, 4=GCPM ran
 use_IGRF = 1    # Magnetic field model (1 for IGRF, 0 for dipole)
 use_tsyg = 0    # Use the Tsyganenko magnetic field model corrections
 
-minalt   = (R_E + 150)*1e3 # cutoff threshold in meters
+minalt   = (R_E + 500)*1e3 # cutoff threshold in meters
 
-dump_model = True
-run_rays   = False
+dump_model = False
+run_rays   = True
 # # Band-aid parameters to use for lower frequencies:
 # maxerr_lowf = 1e-3
 # dt0_lowf = 1e-2
 
 # ---------------- Input parameters --------------------
 
-inp_lats = [35] #np.arange(30, 61, 5) #[40, jh41, 42, 43]
-inp_lons = [0, 90, 180, 270] #np.arange(0, 360, 5) 
+inp_lats = np.arange(10, 61, 5) #[35] #np.arange(30, 61, 5) #[40, jh41, 42, 43]
+inp_lons = np.arange(0, 360, 5) #[0, 90, 180, 270] #np.arange(0, 360, 5) 
 
 launch_alt = (R_E + 1000)*1e3
 
-# f1 = 200; f2 = 30000;
-# num_freqs = 33
-# flogs = np.linspace(np.log10(f1), np.log10(f2), num_freqs)
-# freqs = np.round(pow(10, flogs)/10.)*10
+f1 = 200; f2 = 30000;
+num_freqs = 33
+flogs = np.linspace(np.log10(f1), np.log10(f2), num_freqs)
+freqs = np.round(pow(10, flogs)/10.)*10
 
 
 
 # freqs = freqs[freqs<1000]
 # freqs = [200, 1000, 10000, 30000]
-freqs = [1000]
+# freqs = [1000]
 # Simulation time
-# ray_datenum = dt.datetime(2010, 8, 01, 00, 00, 00);
-ray_datenum = dt.datetime(2010, 1, 6, 0, 0, 0);
+# ray_datenum = dt.datetime(2010, 1, 1, 00, 00, 00);
+ray_datenum = dt.datetime(2001, 1, 1, 0, 0, 0);
 # Damping parameters:
 damp_mode = 1  # 0 for old 2d damping code, 1 for modern code
 
@@ -92,7 +92,7 @@ project_root = '/shared/users/asousa/WIPP/lightning_power_study/'
 raytracer_root = '/shared/users/asousa/software/raytracer_v1.17/'
 damping_root = '/shared/users/asousa/software/damping/'
 ray_bin_dir    = os.path.join(raytracer_root, 'bin')
-ray_out_dir = os.path.join(project_root, 'rays','derg')
+ray_out_dir = os.path.join(project_root, 'rays','globe_kp0')
 
 # GCPM grid to use (plasmasphere model)
 if modelnum==1:
@@ -109,24 +109,42 @@ if modelnum==4:
 
 
 # ------------ Load Kp, Dst, etc at this time -------------
+
+# Mean parameter vals for set Kp:
+Kpvec = [0, 2, 4, 6, 8]
+Aevec = [1.6, 2.2, 2.7, 2.9, 3.0]
+Dstvec= [-3, -15, -38, -96, -215]
+Pdynvec=[1.4, 2.3, 3.4, 5.8, 7.7]
+ByIMFvec=[-0.1, -0.1, 0.1, 0.5 -0.2]
+BzIMFvec=[1.0, 0.6, -0.5, -2.3, -9.2]
+
+vec_ind = 0
+
+Kp   = Kpvec[vec_ind]
+AE   = Aevec[vec_ind]
+Pdyn = Pdynvec[vec_ind]
+Dst  = Dstvec[vec_ind]
+ByIMF= ByIMFvec[vec_ind]
+BzIMF= BzIMFvec[vec_ind]
+W = np.zeros(6)   # Doesn't matter if we're not using Tsyg
+
+
 # Load solar wind parameters (for Tsykadenko corrections)
 # Pdyn, ByIMF, BzIMF, W = load_TS_params(ray_datenum)
-Pdyn = 0.984584
-ByIMF = 0.989923
-BzIMF = 2.49598
-W = np.zeros(6)
+# Pdyn = 0.984584
+# ByIMF = 0.989923
+# BzIMF = 2.49598
+# W = np.zeros(6)
 
 # Load Dst
-Dst = load_Dst(ray_datenum)
-Dst = -6
+# Dst = load_Dst(ray_datenum)
+
 
 # Load Kp
-Kp = 4
 # Kp = Kp_at(ray_datenum)
 
 # Load Ae
-AE = 1
-# AE = Ae_at(ray_datenum)
+# AE = round(Ae_at(ray_datenum))
 
 
 
