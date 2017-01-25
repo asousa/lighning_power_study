@@ -10,6 +10,7 @@ import datetime as dt
 import commands
 import subprocess
 import shutil
+from random import shuffle
 
 
 from index_helpers import load_TS_params
@@ -27,7 +28,6 @@ from bmodel_dipole import bmodel_dipole
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 host = commands.getoutput("hostname")
-print host
 if "cluster" in host:
     host_num = int(host[-3:])
 elif "nansen" in host:
@@ -53,7 +53,7 @@ root = 2        # Which root of the Appleton-Hartree equation
 fixedstep = 0   # Don't use fixed step sizes, that's a bad idea.
 maxerr = 5e-3   # Error bound for adaptive timestepping
 maxsteps = 1e5  # Max number of timesteps (abort if reached)
-modelnum = 2    # Which model to use (1 = ngo, 2=GCPM, 3=GCPM interp, 4=GCPM rand interp)
+modelnum = 1    # Which model to use (1 = ngo, 2=GCPM, 3=GCPM interp, 4=GCPM rand interp)
 use_IGRF = 1    # Magnetic field model (1 for IGRF, 0 for dipole)
 use_tsyg = 0    # Use the Tsyganenko magnetic field model corrections
 
@@ -92,7 +92,7 @@ project_root = '/shared/users/asousa/WIPP/lightning_power_study/'
 raytracer_root = '/shared/users/asousa/software/raytracer_v1.17/'
 damping_root = '/shared/users/asousa/software/damping/'
 ray_bin_dir    = os.path.join(raytracer_root, 'bin')
-ray_out_dir = os.path.join(project_root, 'rays','globe_kp0')
+ray_out_dir = os.path.join(project_root, 'rays','globe_ngo')
 
 # GCPM grid to use (plasmasphere model)
 if modelnum==1:
@@ -161,7 +161,6 @@ W = np.zeros(6)   # Doesn't matter if we're not using Tsyg
 
 
 
-
 # -------- Partition tasks for MPI --------------------
 if rank == 0:
     lats, lons, fs = np.meshgrid(inp_lats, inp_lons, freqs)
@@ -174,6 +173,7 @@ if rank == 0:
 
     tasklist = zip(alts, lats, lons, fs)
 
+    shuffle(tasklist)
     # tasklist = [(launch_alt, w,x,y) for w,x,y in itertools.product(inp_lats, inp_lons, freqs)]
     chunks = partition(tasklist, nProcs)
 
@@ -241,6 +241,8 @@ time.sleep(5)
 comm.Barrier()
 
 working_path = os.path.join(os.path.expanduser("~"),"rayTmp")
+
+
 # working_path = "/tmp";
 
 # (if using full GCPM model, you need all the stupid data files in your working directory)
@@ -438,7 +440,7 @@ if (dump_model):
                 '--minz=%g --maxz=%g '%(minz, maxz) +\
                 '--nx=%g --ny=%g --nz=%g '%(nx, ny, nz) +\
                 '--filename=%s '%(model_outfile) +\
-                '--ngo_configfile=%s '%('newray.in') +\
+                '--ngo_configfile=%s '%(os.path.join(working_path,'newray.in')) +\
                 '--use_igrf=%g --use_tsyganenko=%g '%(use_IGRF,0) +\
                 '--tsyganenko_Pdyn=%g '%(Pdyn) +\
                 '--tsyganenko_Dst=%g '%(Dst) +\
