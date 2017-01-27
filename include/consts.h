@@ -34,28 +34,28 @@
 #define     TRACER_STEP 1e-3     // Step size in field line tracer (units of Earth radii)
 
 // Fine-scale interpolation step sizes:
-#define     FREQ_STEP_SIZE  10  // Hz
+#define     FREQ_STEP_SIZE  5  // Hz
 
 // Grid settings: (extent in R_E)
 #define     XMIN -5
-#define     XMAX 5
-#define     YMIN -5
-#define     YMAX 5
+#define     XMAX -1
+#define     YMIN -2
+#define     YMAX 2
 #define     ZMIN -2
 #define     ZMAX 2
-#define     GRID_STEP_SIZE 0.1
+#define     GRID_STEP_SIZE 0.02
 
 
 
 // Maximum distance from source to consider a ray
-#define     MAX_GROUND_DISTANCE     1000 // km
+#define     MAX_GROUND_DISTANCE     385 // km
 
 // Radius around field line, in L-shells, in which to consider a crossing
 #define		L_MARGIN    0.05     // 6e-4 is approx 1km at the surface at 40 deg...
 
 // Output time axis:
-#define     TIME_MAX    10.0      // Seconds
-#define     NUM_TIMES   20    //ceil(TIME_MAX/TIME_STEP)
+#define     TIME_MAX    15.0      // Seconds
+#define     NUM_TIMES   300    //ceil(TIME_MAX/TIME_STEP)
 
 #define     TIME_STEP   (1.0*((1.0*TIME_MAX)/NUM_TIMES))     // Seconds
 

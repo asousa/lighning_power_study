@@ -3,7 +3,8 @@
 #define ltp_H
 #include <Eigen/Core>
 #include <Eigen/Dense>  // Cross product lives here
-// #include <unsupported/Eigen/NonLinearOptimization>
+#include "interpolation.h"
+
 
 #include <algorithm>    // std::next_permutation, std::sort
 
@@ -251,7 +252,8 @@ vector<cellT> load_crossings(int itime_in[2], string filename);
 cellT new_cell(rayT ray);
 void add_cell(cellT* cell1, cellT* cell2);
 
-double polygon_frame_area(rayT frame[8], double weight);
+// double polygon_frame_area(rayT frame[8], double weight);
+double polygon_frame_area(Vector3d corners[4]);
 
 void get_available_rays(string raypath, vector <vector<double> > *data);
 
@@ -270,10 +272,15 @@ double total_input_power(double flash_pos_sm[3], double i0,
                          double wmin, double wmax, int itime_in[2]);
  
 
-void find_crossing(rayT cur_frames[8], rayT prev_frames[8], Vector3d targ_point, double n_f, double *n_x, double *n_y);
+// void find_crossing(rayT cur_frames[8], rayT prev_frames[8], Vector3d targ_point, double n_f, double *n_x, double *n_y);
+void find_crossing(Vector3d corners[8], double data[8], Vector3d targ_point, double *n_x, double *n_y);
+
 double interp_damping(rayT framelist[8], double n_x, double n_y, double n_z);
 
+// double interp_damping_inv_dist(rayT cur_frames[8], rayT prev_frames[8], double freq_weight, Vector3d targ_point);
+double interp_damping_inv_dist(Vector3d corners[8], double data_at_corners[8], Vector3d targ_point);
 
+double bounding_sphere(Vector3d corners[8], double center_arr[3]);
 
 
 #endif

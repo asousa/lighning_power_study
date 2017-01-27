@@ -9,6 +9,23 @@ import os
 def read_rayfiles(directory, freq, latmin, latmax, lonmin, lonmax):
     '''read rayfiles from a directory '''
 
+    # if (lonmin_in < 0):
+    #     lonmin = 360 + lonmin_in
+    # else:
+    #     lonmin = lonmin_in
+    # if (lonmax_in < 0):
+    #     lonmax = 360 + lonmax_in
+    # else:
+    #     lonmax = lonmax_in
+
+    # if (lonmin > lonmax):
+    #     tmp = lonmin
+    #     lonmin = lonmax
+    #     lonmax = tmp
+
+    print "lonmin: ", lonmin
+    print "lonmax: ", lonmax
+
     out = []
     for root, dirs, files in os.walk(os.path.join(directory, "f_%d"%freq)):
         for f in files:

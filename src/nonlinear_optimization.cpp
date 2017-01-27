@@ -8,8 +8,8 @@ using namespace Eigen;
 using namespace std;
 
 
-double get_d(Matrix<double, 8, 3> P1, Matrix<double, 8, 3> P2, Vector3d targ_point, double nx, double ny, double nz);
-double get_S(Matrix<double, 8, 3> P1, Matrix<double, 8, 3> P2, Vector3d targ_point, double nx, double ny, double nz);
+double get_d(Matrix<double, 4, 3> P1, Matrix<double, 4, 3> P2, Vector3d targ_point, double nx, double ny);
+double get_S(Matrix<double, 4, 3> P1, Matrix<double, 4, 3> P2, Vector3d targ_point, double nx, double ny);
 
 
 
@@ -41,30 +41,25 @@ struct my_functor : Functor<double>
 my_functor(void): Functor<double>(2,3) {}
 Vector3d get_d(VectorXd x);
 
-Matrix<double, 8, 3> P1;
-Matrix<double, 8, 3> P2;
+Matrix<double, 4, 3> P1;
+Matrix<double, 4, 3> P2;
 Vector3d P3;
 
-double x2;  // The third index value (we're not solving for this one)
+// double x2;  // The third index value (we're not solving for this one)
 
 int operator()(const VectorXd &x, VectorXd &fvec) const
     // This is the function we want to minimize -- it's the minimum distance
     // between the line between planes P1 and P2 to point P3.
     // N is the interpolation weights, common to both planes at P1 and P2
     {
-        double n_x = x[0];
-        double n_y = x[1];
-        double n_z = x2;
+        double nx = x[0];
+        double ny = x[1];
 
-        VectorXd N(8);
-        N[0] = (1. - n_x)*(1. - n_y)*(1. - n_z);
-        N[1] = n_x*(1. - n_y)*(1. - n_z);
-        N[2] = n_y*(1. - n_x)*(1. - n_z);
-        N[3] = n_x*n_y*1.*(1. - n_z);
-        N[4] = (1. - n_x)*(1. - n_y)*n_z;
-        N[5] = n_x*(1. - n_y)*n_z;
-        N[6] = n_y*(1. - n_x)*n_z;
-        N[7] = n_x*n_y*n_z*1.;
+        VectorXd N(4);
+        N[0] = (1. - nx)*(1. - ny)*1.0;
+        N[1] = nx       *(1. - ny)*1.0;
+        N[2] = (1. - nx)*ny       *1.0;
+        N[3] = nx       *ny       *1.0;
 
         Vector3d pp1 = N.transpose()*P1;
         Vector3d pp2 = N.transpose()*P2;
@@ -88,24 +83,19 @@ int operator()(const VectorXd &x, VectorXd &fvec) const
 
 
 
-double get_d(Matrix<double, 8, 3> P1, Matrix<double, 8, 3> P2, Vector3d P3, double nx, double ny, double nz) {
-        VectorXd N(8);
-        N[0] = (1. - nx)*(1. - ny)*(1. - nz)*1.0;
-        N[1] = nx       *(1. - ny)*(1. - nz)*1.0;
-        N[2] = (1. - nx)*ny       *(1. - nz)*1.0;
-        N[3] = nx       *ny       *(1. - nz)*1.0;
-        N[4] = (1. - nx)*(1. - ny)*nz*1.0;
-        N[5] = nx       *(1. - ny)*nz*1.0;
-        N[6] = (1. - nx)*ny       *nz*1.0;
-        N[7] = nx       *ny       *nz*1.0;
+double get_d(Matrix<double, 4, 3> P1, Matrix<double, 4, 3> P2, Vector3d P3, double nx, double ny) {
+        VectorXd N(4);
+        N[0] = (1. - nx)*(1. - ny)*1.0;
+        N[1] = nx       *(1. - ny)*1.0;
+        N[2] = (1. - nx)*ny       *1.0;
+        N[3] = nx       *ny       *1.0;
+
 
         Vector3d pp1 = N.transpose()*P1;
         Vector3d pp2 = N.transpose()*P2;
 
         double S = (P3 - pp1).dot(pp2 - pp1)/pow((pp2 - pp1).norm(),2);
         Vector3d d = pp1 + S*(pp2 - pp1);
-        
-        // Vector3d d = get_d(x);
 
         Vector3d dvec = d - P3;
 
@@ -113,16 +103,13 @@ double get_d(Matrix<double, 8, 3> P1, Matrix<double, 8, 3> P2, Vector3d P3, doub
 }
 
 
-double get_S(Matrix<double, 8, 3> P1, Matrix<double, 8, 3> P2, Vector3d P3, double nx, double ny, double nz) {
-        VectorXd N(8);
-        N[0] = (1. - nx)*(1. - ny)*(1. - nz)*1.0;
-        N[1] = nx       *(1. - ny)*(1. - nz)*1.0;
-        N[2] = (1. - nx)*ny       *(1. - nz)*1.0;
-        N[3] = nx       *ny       *(1. - nz)*1.0;
-        N[4] = (1. - nx)*(1. - ny)*nz*1.0;
-        N[5] = nx       *(1. - ny)*nz*1.0;
-        N[6] = (1. - nx)*ny       *nz*1.0;
-        N[7] = nx       *ny       *nz*1.0;
+double get_S(Matrix<double, 4, 3> P1, Matrix<double, 4, 3> P2, Vector3d P3, double nx, double ny) {
+        VectorXd N(4);
+        N[0] = (1. - nx)*(1. - ny)*1.0;
+        N[1] = nx       *(1. - ny)*1.0;
+        N[2] = (1. - nx)*ny       *1.0;
+        N[3] = nx       *ny       *1.0;
+
 
         Vector3d pp1 = N.transpose()*P1;
         Vector3d pp2 = N.transpose()*P2;
@@ -136,7 +123,7 @@ double get_S(Matrix<double, 8, 3> P1, Matrix<double, 8, 3> P2, Vector3d P3, doub
 
 
 
-void find_crossing(rayT cur_frames[8], rayT prev_frames[8], Vector3d targ_point, double n_f, double *n_x, double *n_y) {
+void find_crossing(Vector3d corners[8], double data[8], Vector3d targ_point, double *n_x, double *n_y) {
 // Solve for the interpolating quantities in latitude and longitude, for which the ray
 // passes through the center of the EA segment. PRETTY RAD
 
@@ -148,14 +135,13 @@ x(0) = 0.5;
 x(1) = 0.5;
 // x.setConstant(0.5, 0.5);
 // Set parameters:
-for (int i=0; i < 8; ++i) {
-        functor.P1.row(i)= prev_frames[i].pos;
-        functor.P2.row(i)= cur_frames[i].pos;
+for (int i=0; i < 4; ++i) {
+        functor.P1.row(i)= corners[i];
+        functor.P2.row(i)= corners[i+4];
 }
 
 functor.P3 = targ_point;
 // cout << functor.P1;
-functor.x2 = n_f;
 
 NumericalDiff<my_functor> numDiff(functor);
 LevenbergMarquardt<NumericalDiff<my_functor>,double> lm(numDiff);
@@ -175,8 +161,8 @@ int ret = lm.minimize(x);
 // cout << "solved: " << x.transpose() << "\t returned code: " << ret << " ";
 // cout << "dist: " << get_d(functor.P1, functor.P2, functor.P3, x.data()[0], x.data()[1], functor.x2) << "\n";
 
-double dd = get_d(functor.P1, functor.P2, functor.P3, x.data()[0], x.data()[1], functor.x2);
-double S = get_S(functor.P1, functor.P2, functor.P3, x.data()[0], x.data()[1], functor.x2);
+double dd = get_d(functor.P1, functor.P2, functor.P3, x.data()[0], x.data()[1]);
+double S = get_S(functor.P1, functor.P2, functor.P3, x.data()[0], x.data()[1]);
 // cout << " dist: " << dd << " S: " << S << "\n";
 
 // Threshold the solution -- In order for the closest point to be between the two
@@ -192,42 +178,7 @@ if ( (S >=-2) && ( S <= 2) && (fabs(dd) <= L_MARGIN) ){
     *n_y = 20.;
 }
     
-
-
-// int main(int argc, char *argv[])
-// {
-// VectorXd x(2);
-// x(0) = 0.5;
-// x(1) = 0.5;
-// std::cout << "x: " << x << std::endl;
-
-// my_functor functor;
-
-// functor.P1 << 0, 0, 0,
-//       1, 0, 0,
-//       1, 2, 0,
-//       0, 2, 0;
-
-// functor.P2 << 1, 0, 2,
-//       2.5,0, 2,
-//       2.5, 3, 2,
-//       0, 3, 2;
-// functor.P3 << 1, 0.2, 1.9;
-
-// NumericalDiff<my_functor> numDiff(functor);
-
-// LevenbergMarquardt<NumericalDiff<my_functor>,double> lm(numDiff);
-// lm.parameters.maxfev = 10000;
-// lm.parameters.xtol = 1.0e-10;
-// std::cout << lm.parameters.maxfev << std::endl;
-
-// int ret = lm.minimize(x);
-// // std::cout << lm.iter << std::endl;
-// std::cout << ret << std::endl;
-
-// std::cout << "x that minimizes the function: " << x << std::endl;
-
-
-
-// return 0;
 }
+
+
+

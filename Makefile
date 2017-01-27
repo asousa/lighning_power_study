@@ -1,8 +1,9 @@
 IDIR =include
 EIGEN_DIR=lib/eigen/
+ALGLIB_DIR=lib/alglib/src
 CC=c++
 
-CFLAGS=-I$(IDIR) -I$(EIGEN_DIR) -fopenmp
+CFLAGS=-I$(IDIR) -I$(EIGEN_DIR) -I$(ALGLIB_DIR) -fopenmp
 
 # compiled module directory
 ODIR =build
@@ -29,9 +30,9 @@ sources = \
 	coord_transforms.cpp \
 	nonlinear_optimization.cpp \
 	lightning_power_methods.cpp
-
 _OBJ = ${sources:.cpp=.o}	
 
+SOURCES_WITH_PATH = $(patsubst %,$(SRC_DIR)/%,$(sources))
 
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
@@ -39,7 +40,7 @@ XFORM = $(LDIR)/xform_double
 
 # Rules for making individual objects (from .cpp files in src/)
 $(ODIR)/%.o: $(SRC_DIR)/%.cpp $(DEPS)
-	$(CC) -c -o $@ $< $(CFLAGS) -L$(LDIR)
+	$(CC) -c -o $@ $< $(CFLAGS) -L$(LDIR) -fPIC
 
 # Rule to link everything together + generate executable
 main: $(OBJ) $(LDIR)/libxformd.a
@@ -48,6 +49,10 @@ main: $(OBJ) $(LDIR)/libxformd.a
 # Legacy coordinate transforms, used in raytracer
 $(LDIR)/libxformd.a:
 	$(MAKE) -C $(XFORM)
+
+
+shared: 
+	${CC} ${CFLAGS} ${DEPS} -shared ${OBJ} -o liblightning.so -fPIC	
 
 
 # Safety rule for any file named "clean"
