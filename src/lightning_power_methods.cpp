@@ -266,12 +266,6 @@ double interp_damping_inv_dist(Vector3d corners[8], double data_at_corners[8], V
 }
 
 
-
-double interp_damping_area_weight(Vector3d corners[8], double data[8], Vector3d targ_point) {
-
-
- }
-
 double bounding_sphere(Vector3d corners[8], double center_arr[3]) {
     // Given a set of 8 corner points, find the center and radius of
     // a sphere which circumscribes the box. 

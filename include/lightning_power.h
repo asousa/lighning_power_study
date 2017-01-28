@@ -3,7 +3,7 @@
 #define ltp_H
 #include <Eigen/Core>
 #include <Eigen/Dense>  // Cross product lives here
-#include "interpolation.h"
+#include <interpolation.h>
 
 
 #include <algorithm>    // std::next_permutation, std::sort
@@ -27,6 +27,7 @@
 #include <dirent.h>
 #include <ftw.h>
 
+#include "stdafx.h"
 
 using namespace std;
 using namespace Eigen;

@@ -1,4 +1,10 @@
 #include <lightning_power.h>
+#include "stdafx.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <math.h>
+#include "interpolation.h"
+
 
 int main(int argc, char *argv[]) 
 {
@@ -7,8 +13,8 @@ int main(int argc, char *argv[])
     double flash_pos[3] = {1, 50, 84};
     double flash_I0 = -10000;
 
-    string ray_inp_dir = "/shared/users/asousa/WIPP/lightning_power_study/rays/globe_ngo";
-    string outfile_name = "/shared/users/asousa/WIPP/lightning_power_study/rays/globe_ngo/test_dump.dat";
+    string ray_inp_dir = "/shared/users/asousa/WIPP/lightning_power_study/rays/globe_singleflash";
+    string outfile_name = "/shared/users/asousa/WIPP/lightning_power_study/test_dump.dat";
 
 
     double f1 = 200;
@@ -16,6 +22,12 @@ int main(int argc, char *argv[])
     int iyr = 2001;
     int idoy = 001;
     int isec = 0;
+
+    int num_freqs = floor((f2 - f1)/FREQ_STEP_SIZE);
+
+    // Storage space for the first sweep
+    vector<Vector3d> interp_points[num_freqs];
+    vector<double>   interp_data[num_freqs];
 
     double in_lat, in_lon, avg_distance_from_flash;
     map <int, rayF> raylist;
@@ -34,6 +46,7 @@ int main(int argc, char *argv[])
     Vector3d corners[8];
     double damping_at_corners[8];
     Vector3d centerpoint;
+    double damping_avg;
     double bounding_sphere_radius;
 
     // Array of pointers to single-timestep frames
@@ -93,6 +106,9 @@ int main(int argc, char *argv[])
 
     adjacent_rays = find_adjacent_rays(available_rays);
     cout << "found " << adjacent_rays.size() << " sets of adjacent rays\n";
+
+
+
 
 
 
@@ -248,8 +264,10 @@ int main(int argc, char *argv[])
                 // (Nested-loop hell)
                 // Loop over frequencies:
                 double ii, jj;
-                for (double kk=0; kk < 1; kk += 1./num_freqs_fine) {
-
+                double kk;
+                // for (double kk=0; kk < 1; kk += 1./num_freqs_fine) {
+                for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
+                    kk = k_ind/num_freqs;
 
                     // interpolate corners over frequency axis:
                     for (int i=0; i<4; ++i) {
@@ -263,204 +281,30 @@ int main(int argc, char *argv[])
                     // Get frame area for geometric factor:
                     frame_area = polygon_frame_area(corners);
 
-                    // centerpoint[0] = 0; centerpoint[1] = 0; centerpoint[2] = 0;
-                    // // bounding sphere:
-                    // bounding_sphere_radius = bounding_sphere(corners, centerpoint.data());
-                    // // cout << " centerpoint: " <<  centerpoint.transpose() << " r: " << bounding_sphere_radius << endl;
-                    // // bounding cube:
-                    // int xmin_ind = nearest(xaxis, NX, centerpoint[0] - bounding_sphere_radius, false);
-                    // int xmax_ind = nearest(xaxis, NX, centerpoint[0] + bounding_sphere_radius, false);
-                    // int ymin_ind = nearest(yaxis, NY, centerpoint[1] - bounding_sphere_radius, false);
-                    // int ymax_ind = nearest(yaxis, NY, centerpoint[1] + bounding_sphere_radius, false);
-                    // int zmin_ind = nearest(zaxis, NZ, centerpoint[2] - bounding_sphere_radius, false);
-                    // int zmax_ind = nearest(zaxis, NZ, centerpoint[2] + bounding_sphere_radius, false);
 
-                    // Find min and max values to search thru:
-                    double cmin[3] = {1000000, 1000000, 1000000};
-                    double cmax[3] = {-1000000, -1000000, -1000000};
-                    for (int zz=0; zz<8; ++zz) {
-                        // cout << "corner " << zz << ":" << corners[zz].transpose() << endl;
-                        for (int bb=0; bb<3; ++bb) {
-                            if (corners[zz][bb] < cmin[bb]) {cmin[bb] = corners[zz][bb];}
-                            if (corners[zz][bb] > cmax[bb]) {cmax[bb] = corners[zz][bb];}
-                        }
-                    }
-                    // cout << "cmin: ";
-                    // print_array(cmin,3);
-                    // cout << "cmax: ";
-                    // print_array(cmax,3);
-
-                    int xmin_ind = int(floor((cmin[0] - XMIN)/GRID_STEP_SIZE));
-                    int xmax_ind = int(floor((cmax[0] - cmin[0])/GRID_STEP_SIZE + xmin_ind));
-                    int ymin_ind = int(floor((cmin[1] - YMIN)/GRID_STEP_SIZE));
-                    int ymax_ind = int(floor((cmax[1] - cmin[1])/GRID_STEP_SIZE + ymin_ind));
-                    int zmin_ind = int(floor((cmin[2] - ZMIN)/GRID_STEP_SIZE));
-                    int zmax_ind = int(floor((cmax[2] - cmin[2])/GRID_STEP_SIZE + zmin_ind));
-
-                    cout << xmin_ind << " " << xmax_ind << " ";
-                    cout << ymin_ind << " " << ymax_ind << " ";
-                    cout << zmin_ind << " " << zmax_ind << " " << endl;
-
-
-
-                    // // ---------------- This block to just round to the nearest point
-                    // for (int b = 0; b < 8; b++ ) {
-                    //     x_ind = nearest(xaxis, NX, cur_frames[b].pos[0], false);
-                    //     y_ind = nearest(yaxis, NX, cur_frames[b].pos[1], false);
-                    //     z_ind = nearest(zaxis, NX, cur_frames[b].pos[2], false);
-
-                    //     // x_ind = round((cur_frames[b].pos[0] - XMIN)/GRID_STEP_SIZE);
-                    //     // y_ind = round((cur_frames[b].pos[1] - YMIN)/GRID_STEP_SIZE);
-                    //     // z_ind = round((cur_frames[b].pos[2] - ZMIN)/GRID_STEP_SIZE);
-                    //     out_grid[x_ind][y_ind][z_ind] +=  (inp_pwr/frame_area)*cur_frames[b].damping;
-
-                    //     cout << x_ind << " " << y_ind << " " << z_ind << endl;
-                    // }
-
-
-                    if (xmin_ind >= 0 and xmax_ind < NX and
-                        ymin_ind >= 0 and ymax_ind < NY and
-                        zmin_ind >= 0 and zmax_ind < NZ) {
-                        // Check for intercepts at each entry in the output space                    
-                        for (int x_ind = xmin_ind; x_ind < xmax_ind; ++x_ind){
-                            for (int y_ind = ymin_ind; y_ind < ymax_ind; ++y_ind){
-                                for (int z_ind = zmin_ind; z_ind < zmax_ind; ++z_ind){
-
-                                    // coordinates in center of cell:
-                                    cell_pos[0] = XMIN + x_ind*GRID_STEP_SIZE + GRID_STEP_SIZE/2.;
-                                    cell_pos[1] = YMIN + y_ind*GRID_STEP_SIZE + GRID_STEP_SIZE/2.;
-                                    cell_pos[2] = ZMIN + z_ind*GRID_STEP_SIZE + GRID_STEP_SIZE/2.;
-
-
-                                    // // Interpolate damping...
-                                    // double wx = fabs((cmax[0] - cell_pos[0])/(cmax[0]-cmin[0]));
-                                    // double wy = fabs((cmax[1] - cell_pos[1])/(cmax[1]-cmin[1]));
-                                    // double wz = fabs((cmax[2] - cell_pos[2])/(cmax[2]-cmin[2]));
-
-                                    // // cout << "weights: " << wx << " " << wy << " " << wz << endl;
-                                    // double dd = 0;
-                                    // dd += damping_at_corners[0]*(1-wx)*(1-wy)*(1-wz);
-                                    // dd += damping_at_corners[1]*(wx)*(1-wy)*(1-wz);
-                                    // dd += damping_at_corners[2]*(1-wx)*(wy)*(1-wz);
-                                    // dd += damping_at_corners[3]*(wx)*(wy)*(1-wz);
-                                    // dd += damping_at_corners[4]*(1-wx)*(1-wy)*(wz);
-                                    // dd += damping_at_corners[5]*(wx)*(1-wy)*(wz);
-                                    // dd += damping_at_corners[6]*(1-wx)*(wy)*(wz);
-                                    // dd += damping_at_corners[7]*(wx)*(wy)*(wz);
-
-                                    // out_grid[x_ind][y_ind][z_ind] += (inp_pwr/frame_area)*dd*FREQ_STEP_SIZE;
-                                
-
-
-
-
-
-
-
-                                    // out_grid[x_ind][y_ind][z_ind] += (inp_pwr/frame_area)*
-                                    //                             interp_damping_inv_dist(corners, damping_at_corners, cell_pos) *
-                                    //                             FREQ_STEP_SIZE;
-                                
-
-                                    find_crossing(corners, damping_at_corners, cell_pos, &ii, &jj);
-
-                                    if (ii >=0 and ii <=1 and jj >= 0 and jj <= 1) {
-                                        // cout << ii << " " << jj << endl;
-                                        out_grid[x_ind][y_ind][z_ind] += (inp_pwr/frame_area);
-                                    }            
-
-                                }
-                            }
-                        }
+                    // Just grabbing the value at the center point: Average from all corners.
+                    centerpoint[0] = 0; centerpoint[1] = 0; centerpoint[2] = 0;
+                    damping_avg = 0;
+                    for (int i=0; i<8; ++i) {
+                        centerpoint += corners[i];
+                        damping_avg += damping_at_corners[i];
                     }
 
+                    centerpoint /=8.0;
+                    damping_avg /=8.0;
 
 
+                    // cout << tt << endl;
+                    interp_points[k_ind].push_back(centerpoint);
+                    double cur_pwr = (inp_pwr/frame_area)*damping_avg*FREQ_STEP_SIZE;
+                    interp_data[k_ind].push_back(cur_pwr);
 
+                    // Quantize and add to grid
+                    x_ind = nearest(xaxis, NX, centerpoint[0], false);
+                    y_ind = nearest(yaxis, NX, centerpoint[1], false);
+                    z_ind = nearest(zaxis, NX, centerpoint[2], false);
 
-                    // // Find min and max values to search thru:
-                    // double cmin[3] = {1000};
-                    // double cmax[3] = {-1000};
-                    // for (int zz=0; zz<4; ++zz) {
-                    //     for (int bb=0; bb<3; ++bb) {
-                    //         if (cur_frames[zz].pos[bb]*kk + cur_frames[zz+4].pos[bb]*(1-kk)  < cmin[bb]) {
-                    //             cmin[bb] = cur_frames[zz].pos[bb]*kk + cur_frames[zz].pos[bb]*(1 -kk);
-                    //         }
-                    //         if (cur_frames[zz].pos[bb]*kk + cur_frames[zz+4].pos[bb]*(1-kk) > cmax[bb]) {
-                    //             cmax[bb] = cur_frames[zz].pos[bb]*kk + cur_frames[zz+4].pos[bb]*(1-kk);
-                    //         }
-                    //     }
-                    // }
-
-                    // int xmin_ind = nearest(xaxis, NX, cmin[0], false);
-                    // int xmax_ind = nearest(xaxis, NX, cmax[0], false);
-                    // int ymin_ind = nearest(yaxis, NY, cmin[1], false);
-                    // int ymax_ind = nearest(yaxis, NY, cmax[1], false);
-                    // int zmin_ind = nearest(zaxis, NZ, cmin[2], false);
-                    // int zmax_ind = nearest(zaxis, NZ, cmax[2], false);
-
-
-                    // // ---------------- This block to just round to the nearest point
-                    // for (int b = 0; b < 8; b++ ) {
-                    //     x_ind = nearest(xaxis, NX, cur_frames[b].pos[0], false);
-                    //     y_ind = nearest(yaxis, NX, cur_frames[b].pos[1], false);
-                    //     z_ind = nearest(zaxis, NX, cur_frames[b].pos[2], false);
-
-                    //     // x_ind = round((cur_frames[b].pos[0] - XMIN)/GRID_STEP_SIZE);
-                    //     // y_ind = round((cur_frames[b].pos[1] - YMIN)/GRID_STEP_SIZE);
-                    //     // z_ind = round((cur_frames[b].pos[2] - ZMIN)/GRID_STEP_SIZE);
-                    //     out_grid[x_ind][y_ind][z_ind] +=  (inp_pwr/frame_area)*cur_frames[b].damping;
-
-                    //     cout << x_ind << " " << y_ind << " " << z_ind << endl;
-                    // }
-
-                    // cout << "kk: " << kk << " tt: " << tt << endl;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                    // if (xmin_ind >= 0 and xmax_ind < NX and
-                    //     ymin_ind >= 0 and ymax_ind < NY and
-                    //     zmin_ind >= 0 and zmax_ind < NZ) {
-                    //     // Check for intercepts at each entry in the output space                    
-                    //     for (int x_ind = xmin_ind; x_ind < xmax_ind; ++x_ind){
-                    //         for (int y_ind = ymin_ind; y_ind < ymax_ind; ++y_ind){
-                    //             for (int z_ind = zmin_ind; z_ind < zmax_ind; ++z_ind){
-
-                    //                 // coordinates in center of cell:
-                    //                 cell_pos[0] = XMIN + x_ind*GRID_STEP_SIZE;
-                    //                 cell_pos[1] = YMIN + y_ind*GRID_STEP_SIZE;
-                    //                 cell_pos[2] = ZMIN + z_ind*GRID_STEP_SIZE;
-
-                    //                 out_grid[x_ind][y_ind][z_ind] += (inp_pwr/frame_area)*
-                    //                                                 interp_damping_inv_dist(cur_frames, prev_frames, kk, cell_pos) *
-                    //                                                 FREQ_STEP_SIZE;
-                    //                 // // cout << out_grid[x_ind][y_ind][z_ind] << endl;
-                    //                 // find_crossing(cur_frames, prev_frames, cell_pos, kk, &ii, &jj);            
-
-                    //                 // // check if crossing is within bounds:
-                    //                 // if ( (ii >= 0 ) && (ii <= 1) && (jj >=0) && (jj <=1)) {
-                    //                 //     out_grid[x_ind][y_ind][z_ind] += interp_damping(cur_frames, ii, jj, kk);
-                    //                 //     // cout << "tt: " << tt << " ii: " << ii << " jj: " << jj << " kk: " << kk << endl;
-                    //                 // }
-                    //             }
-                    //         }
-                    //     }
-                    // }
+                    out_grid[x_ind][y_ind][z_ind] += cur_pwr;
                 }
             // Step forward one frame:
             for (int zz=0; zz<8; zz++) { prev_frames[zz] = cur_frames[zz]; }        }
@@ -468,6 +312,62 @@ int main(int argc, char *argv[])
             }
         }
 
+        // cout << "Starting alglib stuff..." << endl;
+        // cout << interp_points[0].size() << " entries"<<endl;
+
+
+        // // Next -- interpolate across the whole danged output grid:
+        // alglib::rbfmodel model;
+        // alglib::rbfcreate(3, 1, model);
+
+        // // double rbf_inp_coords[interp_points[0].size()][4];
+        // alglib::real_2d_array rbf_inps;
+        // rbf_inps.setlength(interp_points[0].size(), 4);
+        // double cmin[3] = {1000};
+        // double cmax[3] = {-1000};
+        // for (int i=0; i<interp_points[0].size(); ++i) {
+        //     for (int j=0; j<3; ++j) {
+        //         rbf_inps[i][j] = interp_points[0][i].data()[j];
+
+        //         if (rbf_inps[i][j] > cmax[j]) {cmax[j] = rbf_inps[i][j]; }
+        //         if (rbf_inps[i][j] < cmin[j]) {cmin[j] = rbf_inps[i][j]; }
+
+        //     }
+        //     rbf_inps[i][3] = interp_data[0][i];
+        //     // cout << interp_points[0][i].transpose() << endl;
+        // }
+
+
+        // int xmin_ind = nearest(xaxis, NX, cmin[0], false);
+        // int xmax_ind = nearest(xaxis, NX, cmax[0], false);
+        // int ymin_ind = nearest(yaxis, NX, cmin[1], false);
+        // int ymax_ind = nearest(yaxis, NX, cmax[1], false);
+        // int zmin_ind = nearest(zaxis, NX, cmin[2], false);
+        // int zmax_ind = nearest(zaxis, NX, cmax[2], false);
+
+
+        // alglib::rbfreport rep;
+        // alglib::rbfsetpoints(model, rbf_inps);
+        // alglib::rbfsetalgoqnn(model, 0.5, 1);
+        // // rbfsetalgomultilayer(model, 0.05, 10);
+        // alglib::rbfbuildmodel(model, rep);
+
+        // double xval, yval, zval;
+        // for (int x_ind = xmin_ind; x_ind < xmax_ind; ++x_ind){
+        //     for (int y_ind = ymin_ind; y_ind < ymax_ind; ++y_ind){
+        //         for (int z_ind = zmin_ind; z_ind < zmax_ind; ++z_ind){
+        //             xval = XMIN + (x_ind + 0.5)*GRID_STEP_SIZE;
+        //             yval = YMIN + (y_ind + 0.5)*GRID_STEP_SIZE;
+        //             zval = ZMIN + (z_ind + 0.5)*GRID_STEP_SIZE;
+
+        //             cout << "interp at: " << xval << " " << yval << " " << zval << endl;
+
+        //             out_grid[x_ind][y_ind][z_ind] = alglib::rbfcalc3(model, xval, yval, zval);
+
+        //         }
+        //     }
+        // }        
+        
 
     // Write output file:
     FILE* outfile;

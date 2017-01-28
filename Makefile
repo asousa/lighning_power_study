@@ -29,7 +29,18 @@ sources = \
 	math_utils.cpp \
 	coord_transforms.cpp \
 	nonlinear_optimization.cpp \
-	lightning_power_methods.cpp
+	lightning_power_methods.cpp  \
+	interpolation.cpp \
+	ap.cpp \
+	alglibinternal.cpp \
+	alglibmisc.cpp \
+	linalg.cpp \
+	solvers.cpp \
+	optimization.cpp \
+	specialfunctions.cpp \
+	integration.cpp
+
+
 _OBJ = ${sources:.cpp=.o}	
 
 SOURCES_WITH_PATH = $(patsubst %,$(SRC_DIR)/%,$(sources))

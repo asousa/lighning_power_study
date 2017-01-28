@@ -67,18 +67,19 @@ run_rays   = True
 
 # ---------------- Input parameters --------------------
 
-inp_lats = np.arange(0, 61, 5) #[35] #np.arange(30, 61, 5) #[40, jh41, 42, 43]
-inp_lons = [-3, -2, -1, 0, 1, 2, 3]
+inp_lats = np.arange(40, 61, 1) #[35] #np.arange(30, 61, 5) #[40, jh41, 42, 43]
+inp_lons = np.arange(69, 80, 1)
 
 #np.arange(0, 360, 5) #[0, 90, 180, 270] #np.arange(0, 360, 5) 
 
 launch_alt = (R_E + 1000)*1e3
 
-f1 = 200; f2 = 30000;
-num_freqs = 33
-flogs = np.linspace(np.log10(f1), np.log10(f2), num_freqs)
-freqs = np.round(pow(10, flogs)/10.)*10
+# f1 = 200; f2 = 30000;
+# num_freqs = 33
+# flogs = np.linspace(np.log10(f1), np.log10(f2), num_freqs)
+# freqs = np.round(pow(10, flogs)/10.)*10
 
+freqs = [200, 230];
 
 
 # freqs = freqs[freqs<1000]
@@ -94,7 +95,7 @@ project_root = '/shared/users/asousa/WIPP/lightning_power_study/'
 raytracer_root = '/shared/users/asousa/software/raytracer_v1.17/'
 damping_root = '/shared/users/asousa/software/damping/'
 ray_bin_dir    = os.path.join(raytracer_root, 'bin')
-ray_out_dir = os.path.join(project_root, 'rays','globe_simple')
+ray_out_dir = os.path.join(project_root, 'rays','globe_singleflash')
 
 # GCPM grid to use (plasmasphere model)
 if modelnum==1:
