@@ -1,19 +1,34 @@
 #include <lightning_power.h>
-#include "stdafx.h"
-#include <stdlib.h>
-#include <stdio.h>
-#include <math.h>
-#include "interpolation.h"
+// #include "stdafx.h"
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <math.h>
+// #include "interpolation.h"
 
 
 int main(int argc, char *argv[]) 
 {
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // Default arguments:
     //                    alt, lat, lon (geomagnetic)
     double flash_pos[3] = {1, 50, 84};
     double flash_I0 = -10000;
 
-    string ray_inp_dir = "/shared/users/asousa/WIPP/lightning_power_study/rays/globe_singleflash";
+    string ray_inp_dir = "/shared/users/asousa/WIPP/lightning_power_study/rays/globe_ngo";
     string outfile_name = "/shared/users/asousa/WIPP/lightning_power_study/test_dump.dat";
 
 
@@ -22,12 +37,89 @@ int main(int argc, char *argv[])
     int iyr = 2001;
     int idoy = 001;
     int isec = 0;
+    double time_max = 10.0;             // Sec
+    int num_times = 100;                  
+    double max_ground_distance = 1000;  // Km
+    double freq_step_size = 100;        // Hz
+    // Parse input arguments:
 
-    int num_freqs = floor((f2 - f1)/FREQ_STEP_SIZE);
 
-    // Storage space for the first sweep
-    vector<Vector3d> interp_points[num_freqs];
-    vector<double>   interp_data[num_freqs];
+    int opt;
+    int opt_index;
+    static struct option long_options[] =
+    {
+        {"out_file",      required_argument,    0, 'a'},
+        {"iyr",           required_argument,    0, 'b'},
+        {"idoy",          required_argument,    0, 'c'},
+        {"isec",          required_argument,    0, 'd'},
+        {"I0",            required_argument,    0, 'e'},
+        {"f1",            required_argument,    0, 'f'},
+        {"f2" ,           required_argument,    0, 'g'},
+        {"ray_dir",       required_argument,    0, 'h'},
+        {"t_max",         required_argument,    0, 'i'},
+        {"max_dist",      required_argument,    0, 'j'},
+        {"num_times",     required_argument,    0, 'k'},
+        {"freq_step_size",required_argument,    0, 'l'},
+        {"lat",           required_argument,    0, 'm'},
+        {"lon",           required_argument,    0, 'n'},
+        
+        {0, 0, 0, 0}
+    };
+
+    while (opt != -1) {
+        opt = getopt_long (argc, argv, "a:b:c:d:e:f:g:h:i:j:k:", long_options, &opt_index);
+        // cout << "opt is " << opt << "\n";
+        switch(opt) {
+            case 0:
+            if (long_options[opt_index].flag != 0)                  break;
+            case 'a':   // outfile_name             
+                outfile_name = (string) optarg;                     break;
+            case 'b':   // iyr              
+                iyr = atoi(optarg);                                 break;
+            case 'c':   // idoy             
+                idoy= atoi(optarg);                                 break;
+            case 'd':   // isec             
+                isec= atoi(optarg);                                 break;
+            case 'e':               
+                flash_I0 = strtod(optarg, NULL);                    break;
+            case 'f':   // lower rayfile                
+                f1 = strtod(optarg, NULL);                          break;
+            case 'g':   // upper rayfile                
+                f2 = strtod(optarg, NULL);                          break; 
+            case 'h':               
+                ray_inp_dir = (string) optarg;                      break;
+            case 'i':  // tmax              
+                time_max = strtod(optarg, NULL);                    break;
+            case 'j':  // max distance  
+                max_ground_distance = strtod(optarg, NULL);         break;
+            case 'k':  // num_times
+                num_times = atoi(optarg);                           break;
+            case 'l':  // frequency step size 
+                freq_step_size = strtod(optarg, NULL);              break;
+            case 'm':  // input latitude (geomagnetic)
+                flash_pos[1] = strtod(optarg, NULL);                break;
+            case 'n':  // input longitude (geomagnetic)
+                flash_pos[2] = strtod(optarg, NULL);                break;
+            case '?':
+                 printf("\nUnknown option: %s\n",opt);  break;
+        }
+    }
+
+
+
+
+
+
+
+
+
+    double time_step = (1.0*((1.0*time_max)/num_times));
+    int num_freqs = fmax(1,floor((f2 - f1)/freq_step_size));
+
+    freq_step_size = fmin(freq_step_size, fabs(f2 - f1));
+    // // Storage space for the first sweep
+    // vector<Vector3d> interp_points[num_freqs];
+    // vector<double>   interp_data[num_freqs];
 
     double in_lat, in_lon, avg_distance_from_flash;
     map <int, rayF> raylist;
@@ -38,7 +130,7 @@ int main(int argc, char *argv[])
     double lat0, lon0, rad0;
     double tmp_coords[3], flash_pos_sm[3];
     time_t run_tstart, run_tend;
-    int num_freqs_fine;
+    // int num_freqs_fine;
     double frame_area, initial_area;
 
     Vector3d cell_pos;
@@ -48,7 +140,7 @@ int main(int argc, char *argv[])
     Vector3d centerpoint;
     double damping_avg;
     double bounding_sphere_radius;
-
+    int kk;
     // Array of pointers to single-timestep frames
     rayT cur_frames[8];
     rayT prev_frames[8];
@@ -59,26 +151,29 @@ int main(int argc, char *argv[])
     itime_in[0] = yearday;
     itime_in[1] = isec*1e3;
 
-    const int NX = round((XMAX - XMIN)/GRID_STEP_SIZE);
-    const int NY = round((YMAX - YMIN)/GRID_STEP_SIZE);
-    const int NZ = round((ZMAX - ZMIN)/GRID_STEP_SIZE);
+    // const int NX = round((XMAX - XMIN)/GRID_STEP_SIZE);
+    // const int NY = round((YMAX - YMIN)/GRID_STEP_SIZE);
+    // const int NZ = round((ZMAX - ZMIN)/GRID_STEP_SIZE);
 
 
-    double xaxis[NX];
-    double yaxis[NY];
-    double zaxis[NZ];
+    // double xaxis[NX];
+    // double yaxis[NY];
+    // double zaxis[NZ];
 
-    for (int i=0; i<NX; ++i) { xaxis[i] = XMIN + i*GRID_STEP_SIZE; }
-    for (int i=0; i<NY; ++i) { yaxis[i] = YMIN + i*GRID_STEP_SIZE; }
-    for (int i=0; i<NZ; ++i) { zaxis[i] = ZMIN + i*GRID_STEP_SIZE; }
+    // int x_ind, y_ind, z_ind;
+    // double ii, jj, kk;
 
-    // Set up output grid
-    cout << "NX: " << NX << " NY: " << NY << " NZ: " << NZ << endl;
-    double out_grid[NX][NY][NZ];
+    // for (int i=0; i<NX; ++i) { xaxis[i] = XMIN + i*GRID_STEP_SIZE; }
+    // for (int i=0; i<NY; ++i) { yaxis[i] = YMIN + i*GRID_STEP_SIZE; }
+    // for (int i=0; i<NZ; ++i) { zaxis[i] = ZMIN + i*GRID_STEP_SIZE; }
 
-    for (int i=0; i<NX; ++i) { for (int j=0; j<NY; ++j) { for (int k=0; k<NZ; ++k) {
-        out_grid[i][j][k] = 0;
-    }}}
+    // // Set up output grid
+    // cout << "NX: " << NX << " NY: " << NY << " NZ: " << NZ << endl;
+    // double out_grid[NX][NY][NZ];
+
+    // for (int i=0; i<NX; ++i) { for (int j=0; j<NY; ++j) { for (int k=0; k<NZ; ++k) {
+    //     out_grid[i][j][k] = 0;
+    // }}}
 
 
 
@@ -99,6 +194,8 @@ int main(int argc, char *argv[])
     tmp << ray_inp_dir << "/f_" << f1;
     vector <vector<double> > available_rays;
     vector <vector<double> > adjacent_rays;
+    vector <vector<double> > adjacent_rays_within_range;
+
 
 
     get_available_rays(tmp.str(), &available_rays);
@@ -108,11 +205,9 @@ int main(int argc, char *argv[])
     cout << "found " << adjacent_rays.size() << " sets of adjacent rays\n";
 
 
+    int num_rays_within_range = 0;
 
-
-
-
-    // -------------- Iterate through adjacent ray sets: -----------------
+// -------------- Count how many adjacent ray sets we have within range: -----------------
     for (vector < vector<double> >::iterator adj_row=adjacent_rays.begin(); adj_row!=adjacent_rays.end(); ++adj_row) {
         avg_distance_from_flash = 0;
 
@@ -125,192 +220,314 @@ int main(int argc, char *argv[])
                                             // (Assuming both frequencies have same ray spacing) 
 
         // Check if these rays are close enough to care about them:
-        if ( (avg_distance_from_flash <= MAX_GROUND_DISTANCE) ) {
-            // cout << "avg dist: " << avg_distance_from_flash << endl;
-            // print_vector(*adj_row);
+        if ( (avg_distance_from_flash <= max_ground_distance) ) {
+            adjacent_rays_within_range.push_back(*adj_row);
+        }
+    }
 
-            // -------------- Load current rays ----------------------------------:
-            for (int jj=0; jj<8; ++jj) {
-                ostringstream cur_file;
+    int num_power_vects = adjacent_rays_within_range.size();
+    cout << "num rays within range: " << num_power_vects << endl;
 
-                double f   = (jj < 4 ? f1 : f2);
-                double lat = (jj < 4 ? (*adj_row)[2*jj]   : (*adj_row)[2*(jj - 4)]);
-                double lon = (jj < 4 ? (*adj_row)[2*jj+1] : (*adj_row)[2*(jj - 4) + 1]);
-                cur_file << ray_inp_dir   << "/f_" << f   << "/lon_"    << lon
-                         << "/ray_" << f  << "_"   << lat << "_" << lon << ".ray";
 
-                raylist = read_rayfile(cur_file.str());
-                cur_rays[jj] = raylist.at(1); // First ray should have ray number "1"
-         
-                cur_rays[jj].in_lat = lat; cur_rays[jj].in_lon = lon;
-                // calc_stix_parameters(&(cur_rays[jj]));
+    // Allocate storage space for the power vectors:
+    vector<Vector3d> interp_points[num_freqs][num_power_vects];
+    vector<double>   interp_data[num_freqs][num_power_vects];
 
-                // Also load the damping file: 
-                cur_file.str(""); cur_file.clear();
-                cur_file << ray_inp_dir   << "/f_" << f   << "/lon_"    << lon
-                         << "/damp_" << f  << "_"   << lat << "_" << lon << ".ray";
-                raylist = read_dampfile(cur_file.str());
-                cur_rays[jj].damping = raylist.at(1).damping;
 
-            }
-            
-            // if (DEBUG) {check_memory_usage();}
+
+    // -------------- Iterate through adjacent ray sets: -----------------
+    int set_index;
+    for (vector < vector<double> >::iterator adj_row=adjacent_rays_within_range.begin(); adj_row!=adjacent_rays_within_range.end(); ++adj_row) {
+
+        set_index = distance(adjacent_rays_within_range.begin(), adj_row);
+        cout << "index: " << set_index << endl;
+        avg_distance_from_flash = 0;
+
+        for (int i=0; i<4; ++i) {
+            in_lat = (*adj_row)[2*i  ];
+            in_lon = (*adj_row)[2*i+1];
+            avg_distance_from_flash += haversine_distance(in_lat, in_lon, flash_pos[1], flash_pos[2]);
+        }
+        avg_distance_from_flash /= 4000.0;  // Average dist of the 4 corner rays, in km
+                                            // (Assuming both frequencies have same ray spacing) 
+        // -------------- Load current rays ----------------------------------:
+        for (int jj=0; jj<8; ++jj) {
+            ostringstream cur_file;
+
+            double f   = (jj < 4 ? f1 : f2);
+            double lat = (jj < 4 ? (*adj_row)[2*jj]   : (*adj_row)[2*(jj - 4)]);
+            double lon = (jj < 4 ? (*adj_row)[2*jj+1] : (*adj_row)[2*(jj - 4) + 1]);
+            cur_file << ray_inp_dir   << "/f_" << f   << "/lon_"    << lon
+                     << "/ray_" << f  << "_"   << lat << "_" << lon << ".ray";
+
+            raylist = read_rayfile(cur_file.str());
+            cur_rays[jj] = raylist.at(1); // First ray should have ray number "1"
+     
+            cur_rays[jj].in_lat = lat; cur_rays[jj].in_lon = lon;
+            // calc_stix_parameters(&(cur_rays[jj]));
+
+            // Also load the damping file: 
+            cur_file.str(""); cur_file.clear();
+            cur_file << ray_inp_dir   << "/f_" << f   << "/lon_"    << lon
+                     << "/damp_" << f  << "_"   << lat << "_" << lon << ".ray";
+            raylist = read_dampfile(cur_file.str());
+            cur_rays[jj].damping = raylist.at(1).damping;
+
+        }
         
-            // Find minimum and maximum frequencies, start lats, and start lons:
-            wmin   = cur_rays[0].w;         wmax = cur_rays[0].w;
-            latmin = cur_rays[0].in_lat;  latmax = cur_rays[0].in_lat;
-            lonmin = cur_rays[0].in_lon;  lonmax = cur_rays[0].in_lon;
-            tmax   = cur_rays[0].time.back();
-            double in_lat, in_lon;
+        // if (DEBUG) {check_memory_usage();}
+    
+        // Find minimum and maximum frequencies, start lats, and start lons:
+        wmin   = cur_rays[0].w;         wmax = cur_rays[0].w;
+        latmin = cur_rays[0].in_lat;  latmax = cur_rays[0].in_lat;
+        lonmin = cur_rays[0].in_lon;  lonmax = cur_rays[0].in_lon;
+        tmax   = cur_rays[0].time.back();
+        double in_lat, in_lon;
 
-            for (int i=1; i < 8; i++) {
-                in_lon = cur_rays[i].in_lon;
-                in_lat = cur_rays[i].in_lat;
-                
-                if (in_lon >= 360)                  { in_lon -= 360; }
-                if (cur_rays[i].w < wmin)          { wmin = cur_rays[i].w; } 
-                if (cur_rays[i].w > wmax )         { wmax = cur_rays[i].w; }
-                if (cur_rays[i].in_lat < latmin )  { latmin = cur_rays[i].in_lat; }
-                if (cur_rays[i].in_lat > latmax )  { latmax = cur_rays[i].in_lat; }
-                if (in_lon < lonmin )               { lonmin = in_lon; }
-                if (in_lon > lonmax )               { lonmax = in_lon; }
-                if (cur_rays[i].time.back() < tmax){ tmax = cur_rays[i].time.back(); }
-            }
+        for (int i=1; i < 8; i++) {
+            in_lon = cur_rays[i].in_lon;
+            in_lat = cur_rays[i].in_lat;
+            
+            if (in_lon >= 360)                  { in_lon -= 360; }
+            if (cur_rays[i].w < wmin)          { wmin = cur_rays[i].w; } 
+            if (cur_rays[i].w > wmax )         { wmax = cur_rays[i].w; }
+            if (cur_rays[i].in_lat < latmin )  { latmin = cur_rays[i].in_lat; }
+            if (cur_rays[i].in_lat > latmax )  { latmax = cur_rays[i].in_lat; }
+            if (in_lon < lonmin )               { lonmin = in_lon; }
+            if (in_lon > lonmax )               { lonmax = in_lon; }
+            if (cur_rays[i].time.back() < tmax){ tmax = cur_rays[i].time.back(); }
+        }
 
-            tmax = min(tmax, TIME_MAX);
+        tmax = min(tmax, time_max);
 
-            // starting separation in lat, lon directions (meters)
-            dlat = D2R*(R_E + H_IONO)*(latmax - latmin);
-            dlon = D2R*(R_E + H_IONO)*(lonmax - lonmin)*cos(D2R*(latmax + latmin)/2.);
-            dw   = wmax - wmin;
+        // starting separation in lat, lon directions (meters)
+        dlat = D2R*(R_E + H_IONO)*(latmax - latmin);
+        dlon = D2R*(R_E + H_IONO)*(lonmax - lonmin)*cos(D2R*(latmax + latmin)/2.);
+        dw   = wmax - wmin;
 
-            cout << "\n----- current rays: -----\n";
-            cout << "lon: " << lonmax << ", " << lonmin << " deg\n";
-            cout << "lat: " << latmax << ", " << latmin << " deg\n";
-            cout << "f: " << wmax/(2*PI) << ", " << wmin/(2*PI) << " Hz\n"; 
-            cout << "Avg distance from flash: " << avg_distance_from_flash << " km\n";
+        cout << "\n----- current rays: -----\n";
+        cout << "lon: " << lonmax << ", " << lonmin << " deg\n";
+        cout << "lat: " << latmax << ", " << latmin << " deg\n";
+        cout << "f: " << wmax/(2*PI) << ", " << wmin/(2*PI) << " Hz\n"; 
+        cout << "Avg distance from flash: " << avg_distance_from_flash << " km\n";
 
-            num_freqs_fine = max(1, (int)floor( (wmax - wmin)/(2.*PI*FREQ_STEP_SIZE )));
+        // Scale the input power by dlat, dlon, dw:
+        // (ray spacing may not be consistent)
+        double inp_pwr = 0;
 
-
-            // Scale the input power by dlat, dlon, dw:
-            // (ray spacing may not be consistent)
-            double inp_pwr = 0;
-
-            inp_pwr = total_input_power(flash_pos_sm, flash_I0, 
-                                        latmin, latmax, lonmin, lonmax, wmin, wmax, itime_in);
-            cout << "input power: " << inp_pwr << " Watts\n";
-
-
-
-            // --------------------- Interpolate + sum over output grid ----------------
-            //                                ( The main event)            
-            // -------------------------------------------------------------------------
-            time(&run_tstart);
-            // Interpolate the first frames:
-            for (int zz=0; zz<8; zz++) { 
-                interp_rayF(&cur_rays[zz], &(prev_frames[zz]), 0); 
-                corners[zz] = prev_frames[zz].pos;
-            }
+        inp_pwr = total_input_power(flash_pos_sm, flash_I0, 
+                                    latmin, latmax, lonmin, lonmax, wmin, wmax, itime_in);
+        cout << "input power: " << inp_pwr << " Watts\n";
 
 
 
-
-            initial_area = polygon_frame_area(corners);
-
-            // Step forward in time:
-            for (double tt=TIME_STEP; tt < tmax; tt+=TIME_STEP) {
-                // interpolate current frames:
-                for (int zz=0; zz<8; zz++) { interp_rayF(&cur_rays[zz], &(cur_frames[zz]), tt);}
-
-
-
-
-                // Find min and max values to search thru:
-                // double cmin[3] = {1000};
-                // double cmax[3] = {-1000};
-                // for (int zz=0; zz<8; ++zz) {
-                //     for (int bb=0; bb<3; ++bb) {
-                //         if (cur_frames[zz].pos[bb] < cmin[bb]) {cmin[bb] = cur_frames[zz].pos[bb];}
-                //         if (cur_frames[zz].pos[bb] > cmax[bb]) {cmax[bb] = cur_frames[zz].pos[bb];}
-                //         if (prev_frames[zz].pos[bb] < cmin[bb]) {cmin[bb] = prev_frames[zz].pos[bb];}
-                //         if (prev_frames[zz].pos[bb] > cmax[bb]) {cmax[bb] = prev_frames[zz].pos[bb];}
-                //     }
-                // }
+        // --------------------- Interpolate + sum over output grid ----------------
+        //                                ( The main event)            
+        // -------------------------------------------------------------------------
+        time(&run_tstart);
+        // Interpolate the first frames:
+        for (int zz=0; zz<8; zz++) { 
+            interp_rayF(&cur_rays[zz], &(prev_frames[zz]), 0); 
+            corners[zz] = prev_frames[zz].pos;
+        }
 
 
-                // int xmin_ind = nearest(xaxis, NX, cmin[0], false);
-                // int xmax_ind = nearest(xaxis, NX, cmax[0], false);
-                // int ymin_ind = nearest(yaxis, NX, cmin[1], false);
-                // int ymax_ind = nearest(yaxis, NX, cmax[1], false);
-                // int zmin_ind = nearest(zaxis, NX, cmin[2], false);
-                // int zmax_ind = nearest(zaxis, NX, cmax[2], false);
 
-                // int xmin_ind = floor((cmin[0] - XMIN)/GRID_STEP_SIZE);
-                // int xmax_ind = int(ceil((cmax[0] - cmin[0])/GRID_STEP_SIZE + xmin_ind));
-                // int ymin_ind = floor((cmin[1] - YMIN)/GRID_STEP_SIZE);
-                // int ymax_ind = int(ceil((cmax[1] - cmin[1])/GRID_STEP_SIZE + ymin_ind));
-                // int zmin_ind = floor((cmin[2] - ZMIN)/GRID_STEP_SIZE);
-                // int zmax_ind = int(ceil((cmax[2] - cmin[2])/GRID_STEP_SIZE + zmin_ind));
-                // print_array(cmin, 3);
-                // print_array(cmax, 3);
-                
-                // cout << xmin_ind << " " << xmax_ind << " ";
-                // cout << ymin_ind << " " << ymax_ind << " ";
-                // cout << zmin_ind << " " << zmax_ind << " " << endl;
+        // Initial area (only needed if you're calculating relative spreading instead of absolute)
+        initial_area = polygon_frame_area(corners);
 
+        // Step forward in time:
+        for (double tt=time_step; tt < tmax; tt+=time_step) {
+            // interpolate current frames:
+            for (int zz=0; zz<8; zz++) { interp_rayF(&cur_rays[zz], &(cur_frames[zz]), tt);}
 
-                int x_ind, y_ind, z_ind;
-                // (Nested-loop hell)
-                // Loop over frequencies:
-                double ii, jj;
-                double kk;
-                // for (double kk=0; kk < 1; kk += 1./num_freqs_fine) {
-                for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
-                    kk = k_ind/num_freqs;
+            // for (double kk=0; kk < 1; kk += 1./num_freqs_fine) {
+            for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
+                kk = k_ind/num_freqs;
 
-                    // interpolate corners over frequency axis:
-                    for (int i=0; i<4; ++i) {
-                        corners[i]   = cur_frames[i].pos*kk + cur_frames[i+4].pos*(1-kk);
-                        corners[i+4] = prev_frames[i].pos*kk + prev_frames[i+4].pos*(1-kk);
-                        damping_at_corners[i] = cur_frames[i].damping*kk + cur_frames[i+4].damping*(1-kk);
-                        damping_at_corners[i+4] = prev_frames[i].damping*kk + prev_frames[i+4].damping*(1-kk);
-                        // cout << "corner: " << corners[i].transpose() << endl;
-                    }
-
-                    // Get frame area for geometric factor:
-                    frame_area = polygon_frame_area(corners);
-
-
-                    // Just grabbing the value at the center point: Average from all corners.
-                    centerpoint[0] = 0; centerpoint[1] = 0; centerpoint[2] = 0;
-                    damping_avg = 0;
-                    for (int i=0; i<8; ++i) {
-                        centerpoint += corners[i];
-                        damping_avg += damping_at_corners[i];
-                    }
-
-                    centerpoint /=8.0;
-                    damping_avg /=8.0;
-
-
-                    // cout << tt << endl;
-                    interp_points[k_ind].push_back(centerpoint);
-                    double cur_pwr = (inp_pwr/frame_area)*damping_avg*FREQ_STEP_SIZE;
-                    interp_data[k_ind].push_back(cur_pwr);
-
-                    // Quantize and add to grid
-                    x_ind = nearest(xaxis, NX, centerpoint[0], false);
-                    y_ind = nearest(yaxis, NX, centerpoint[1], false);
-                    z_ind = nearest(zaxis, NX, centerpoint[2], false);
-
-                    out_grid[x_ind][y_ind][z_ind] += cur_pwr;
+                // interpolate corners over frequency axis:
+                for (int i=0; i<4; ++i) {
+                    corners[i]   = cur_frames[i].pos*kk + cur_frames[i+4].pos*(1-kk);
+                    corners[i+4] = prev_frames[i].pos*kk + prev_frames[i+4].pos*(1-kk);
+                    damping_at_corners[i] = cur_frames[i].damping*kk + cur_frames[i+4].damping*(1-kk);
+                    damping_at_corners[i+4] = prev_frames[i].damping*kk + prev_frames[i+4].damping*(1-kk);
                 }
-            // Step forward one frame:
-            for (int zz=0; zz<8; zz++) { prev_frames[zz] = cur_frames[zz]; }        }
 
+                // Get frame area for geometric factor:
+                frame_area = polygon_frame_area(corners);
+
+
+                // Just grabbing the value at the center point: Average from all corners.
+                centerpoint[0] = 0; centerpoint[1] = 0; centerpoint[2] = 0;
+                damping_avg = 0;
+                for (int i=0; i<8; ++i) {
+                    centerpoint += corners[i];
+                    damping_avg += damping_at_corners[i];
+                }
+                centerpoint /=8.0;
+                damping_avg /=8.0;
+
+                // cout << tt << endl;
+                interp_points[k_ind][set_index].push_back(centerpoint);
+                double cur_pwr = (inp_pwr/frame_area)*damping_avg*freq_step_size;
+                interp_data[k_ind][set_index].push_back(cur_pwr);
+
+                // // Quantize and add to grid
+                // x_ind = nearest(xaxis, NX, centerpoint[0], false);
+                // y_ind = nearest(yaxis, NX, centerpoint[1], false);
+                // z_ind = nearest(zaxis, NX, centerpoint[2], false);
+
+                // out_grid[x_ind][y_ind][z_ind] += cur_pwr;
+            }
+        // Step forward one frame:
+        for (int zz=0; zz<8; zz++) { prev_frames[zz] = cur_frames[zz]; }        }
+
+        }
+
+
+        // ------------- Interpolate between calculated power vectors ----------------
+
+        // Find adjacent pairs:
+
+        // for (int cur = 0; cur < num_power_vects; cur++){
+
+        //     vector <double> dists_to;
+        //     for (int other = 0; other < num_power_vects; other++){
+        //         if (cur != other) {
+        //             double dd = (interp_points[0][cur][0] - interp_points[0][other][0]).norm();
+        //             dists_to.push_back(dd);
+        //             // cout << dd << endl;
+        //         }
+        //     }
+        // }
+
+
+
+        // Just write all these values to a file, so you can dick with them in Python.
+
+    
+        FILE* outfile;
+        outfile = fopen(outfile_name.c_str(),"wb");
+        if (outfile==NULL) {
+            cout << "failed to open output file ;~;" << endl;
+        } else {
+
+            fprintf(outfile, "%d\t%d\t%d\t",num_freqs, num_power_vects, num_times);
+
+            for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
+                for (int i_ind = 0; i_ind < num_power_vects; i_ind++) {
+                    for (int t_ind = 0; t_ind < num_times; ++t_ind) {
+                        fprintf(outfile,"%g\t%g\t%g\t%g\t",
+                            interp_points[k_ind][i_ind][t_ind][0],
+                            interp_points[k_ind][i_ind][t_ind][1],
+                            interp_points[k_ind][i_ind][t_ind][2],
+                            interp_data[k_ind][i_ind][t_ind]);
+                    }
+                }
             }
         }
+        fclose(outfile);
+
+
+
+
+
+
+
+
+
+
+
+
+        // for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
+
+        //     // // starting coords: (just print them for now)
+        //     // for (int i_ind = 0; i_ind < num_power_vects; i_ind++){
+
+
+
+        //     //     cout << interp_points[k_ind][i_ind][0].transpose() << endl;
+        //     // }
+        //     for (double tt=TIME_STEP; tt < tmax; tt+=TIME_STEP) {
+        //         double cmin[3] = {1000, 1000, 1000};
+        //         double cmax[3] = {-1000,-1000,-1000};
+        //         // Find min and max indices:
+        //         for (int i=0; i<num_power_vects; ++i) {
+        //             for (int j=0; j<3; ++j) {
+        //                 double tmp = interp_points[k_ind][i][tt-1].data()[j];
+        //                 if (tmp > cmax[j]) {cmax[j] = tmp; }
+        //                 if (tmp < cmin[j]) {cmin[j] = tmp; }
+        //                 tmp = interp_points[k_ind][i][tt].data()[j];
+        //                 if (tmp > cmax[j]) {cmax[j] = tmp; }
+        //                 if (tmp < cmin[j]) {cmin[j] = tmp; }
+        //             }
+        //         }
+
+
+        //         int xmin_ind = nearest(xaxis, NX, cmin[0], false);
+        //         int xmax_ind = nearest(xaxis, NX, cmax[0], false);
+        //         int ymin_ind = nearest(yaxis, NX, cmin[1], false);
+        //         int ymax_ind = nearest(yaxis, NX, cmax[1], false);
+        //         int zmin_ind = nearest(zaxis, NX, cmin[2], false);
+        //         int zmax_ind = nearest(zaxis, NX, cmax[2], false); 
+
+        //         cout << xmin_ind << " " << xmax_ind << " ";
+        //         cout << ymin_ind << " " << ymax_ind << " ";
+        //         cout << zmin_ind << " " << zmax_ind << endl;
+
+        //         // And now you're back to the same problem
+        //         // (but with correct center values).   
+
+        //         // --> Decide how to interpolate over this set (2 x num_power_vects points).
+        //         // This defines the wavefront at timestep tt.
+        //         // Nearest neighbor / distance weighting? Area/volume weighting?
+        //         // Fit a function to the wavefront positions and amplitudes? That's kinda cool...
+                
+
+
+
+
+
+            
+
+
+
+
+        //     }
+        // }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         // cout << "Starting alglib stuff..." << endl;
         // cout << interp_points[0].size() << " entries"<<endl;
@@ -370,13 +587,13 @@ int main(int argc, char *argv[])
         
 
     // Write output file:
-    FILE* outfile;
-    outfile = fopen(outfile_name.c_str(),"wb");
-    if (outfile==NULL) {
-        cout << "failed to open output file ;~;" << endl;
-    } else {
-        fwrite(out_grid, NX*NY*NZ*sizeof(double), 1, outfile);
-    }
-    fclose(outfile);
+    // FILE* outfile;
+    // outfile = fopen(outfile_name.c_str(),"wb");
+    // if (outfile==NULL) {
+    //     cout << "failed to open output file ;~;" << endl;
+    // } else {
+    //     fwrite(out_grid, NX*NY*NZ*sizeof(double), 1, outfile);
+    // }
+    // fclose(outfile);
 
 }

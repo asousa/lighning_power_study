@@ -3,7 +3,8 @@ EIGEN_DIR=lib/eigen/
 ALGLIB_DIR=lib/alglib/src
 CC=c++
 
-CFLAGS=-I$(IDIR) -I$(EIGEN_DIR) -I$(ALGLIB_DIR) -fopenmp
+# CFLAGS=-I$(IDIR) -I$(EIGEN_DIR) -I$(ALGLIB_DIR) -fopenmp
+CFLAGS=-I$(IDIR) -I$(EIGEN_DIR) -fopenmp
 
 # compiled module directory
 ODIR =build
@@ -18,7 +19,7 @@ BDIR =bin
 SRC_DIR=src
 
 # Dependencies (header files)
-_DEPS = lightning_power.h consts.h
+_DEPS = lightning_power.h consts.h 
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 
 # Objects to build
@@ -29,16 +30,18 @@ sources = \
 	math_utils.cpp \
 	coord_transforms.cpp \
 	nonlinear_optimization.cpp \
-	lightning_power_methods.cpp  \
-	interpolation.cpp \
-	ap.cpp \
-	alglibinternal.cpp \
-	alglibmisc.cpp \
-	linalg.cpp \
-	solvers.cpp \
-	optimization.cpp \
-	specialfunctions.cpp \
-	integration.cpp
+	lightning_power_methods.cpp
+
+
+	# interpolation.cpp \
+	# ap.cpp \
+	# alglibinternal.cpp \
+	# alglibmisc.cpp \
+	# linalg.cpp \
+	# solvers.cpp \
+	# optimization.cpp \
+	# specialfunctions.cpp \
+	# integration.cpp
 
 
 _OBJ = ${sources:.cpp=.o}	
