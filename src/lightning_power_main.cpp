@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
     };
 
     while (opt != -1) {
-        opt = getopt_long (argc, argv, "a:b:c:d:e:f:g:h:i:j:k:", long_options, &opt_index);
+        opt = getopt_long (argc, argv, "a:b:c:d:e:f:g:h:i:j:k:l:m:n", long_options, &opt_index);
         // cout << "opt is " << opt << "\n";
         switch(opt) {
             case 0:
@@ -104,12 +104,6 @@ int main(int argc, char *argv[])
                  printf("\nUnknown option: %s\n",opt);  break;
         }
     }
-
-
-
-
-
-
 
 
 
@@ -150,6 +144,20 @@ int main(int argc, char *argv[])
     int yearday = iyr*1000 + idoy;
     itime_in[0] = yearday;
     itime_in[1] = isec*1e3;
+
+
+
+    // Talk about yaself
+    cout << "---- power density calculation ---- " << endl;
+    cout << "ray dir:\t" << ray_inp_dir << endl;
+    cout << "outfile:\t" << outfile_name << endl;
+    cout << "yearday:\t" << itime_in[0] << endl;
+    cout << "msecs:\t" << itime_in[1] << endl;
+    cout << "lat:\t" << flash_pos[1] << endl;
+    cout << "lon:\t" << flash_pos[2] << endl;
+    cout << "freqs:\t" << f1 << " to " << f2 << endl;
+    cout << "step size:\t" << freq_step_size << " Hz" << endl;
+
 
     // const int NX = round((XMAX - XMIN)/GRID_STEP_SIZE);
     // const int NY = round((YMAX - YMIN)/GRID_STEP_SIZE);
