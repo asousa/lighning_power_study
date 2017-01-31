@@ -413,18 +413,31 @@ int main(int argc, char *argv[])
 
         // Just write all these values to a file, so you can dick with them in Python.
 
-    
-        FILE* outfile;
+
+        // Find the minimum length of the set:
+        int min_num_times = num_times;
+
+        for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
+            for (int i_ind = 0; i_ind < num_power_vects; i_ind++) {
+                if (interp_data[k_ind][i_ind].size() < min_num_times) {
+                    min_num_times = interp_data[k_ind][i_ind].size();
+                }
+            }
+        }
+        
+        cout << "requested timesteps: " << num_times;
+        cout << " Actual timesteps: " << min_num_times << endl;
+        FILE* outfile; 
         outfile = fopen(outfile_name.c_str(),"wb");
         if (outfile==NULL) {
             cout << "failed to open output file ;~;" << endl;
         } else {
 
-            fprintf(outfile, "%d\t%d\t%d\t",num_freqs, num_power_vects, num_times);
+            fprintf(outfile, "%d\t%d\t%d\t",num_freqs, num_power_vects, min_num_times);
 
             for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
                 for (int i_ind = 0; i_ind < num_power_vects; i_ind++) {
-                    for (int t_ind = 0; t_ind < num_times; ++t_ind) {
+                    for (int t_ind = 0; t_ind < min_num_times; ++t_ind) {
                         fprintf(outfile,"%g\t%g\t%g\t%g\t",
                             interp_points[k_ind][i_ind][t_ind][0],
                             interp_points[k_ind][i_ind][t_ind][1],
