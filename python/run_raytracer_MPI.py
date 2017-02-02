@@ -43,7 +43,7 @@ R_E = 6371
 
 
 # -------------- Simulation params ---------------------
-t_max = 15.     # Maximum duration in seconds
+t_max = 10.     # Maximum duration in seconds
 
 dt0 = 1e-3      # Initial timestep in seconds
 dtmax = 1e-1    # Maximum allowable timestep in seconds
@@ -53,8 +53,8 @@ root = 2        # Which root of the Appleton-Hartree equation
 fixedstep = 0   # Don't use fixed step sizes, that's a bad idea.
 maxerr = 5e-3   # Error bound for adaptive timestepping
 maxsteps = 1e5  # Max number of timesteps (abort if reached)
-modelnum = 2    # Which model to use (1 = ngo, 2=GCPM, 3=GCPM interp, 4=GCPM rand interp)
-use_IGRF = 1    # Magnetic field model (1 for IGRF, 0 for dipole)
+modelnum = 1    # Which model to use (1 = ngo, 2=GCPM, 3=GCPM interp, 4=GCPM rand interp)
+use_IGRF = 0    # Magnetic field model (1 for IGRF, 0 for dipole)
 use_tsyg = 0    # Use the Tsyganenko magnetic field model corrections
 
 minalt   = (R_E + 500)*1e3 # cutoff threshold in meters
@@ -71,7 +71,11 @@ run_rays   = True
 # ---------------- Input parameters --------------------
 
 inp_lats = np.arange(10, 61, 5) #[35] #np.arange(30, 61, 5) #[40, jh41, 42, 43]
-inp_lons = np.arange(0, 360, 5)
+# inp_lons = np.arange(0, 360, 5)
+
+# Nightside -- at midnight, nightside is ~84 deg longitude.
+inp_lons = np.arange(65, 106, 2)
+
 
 #np.arange(0, 360, 5) #[0, 90, 180, 270] #np.arange(0, 360, 5) 
 
@@ -88,7 +92,7 @@ freqs = np.round(pow(10, flogs)/10.)*10
 # freqs = freqs[freqs<1000]
 # freqs = [200, 1000, 10000, 30000]
 # freqs = [1000]
-# Simulation time
+# Simulation timejh
 # ray_datenum = dt.datetime(2010, 1, 1, 00, 00, 00);
 ray_datenum = dt.datetime(2001, 1, 1, 0, 0, 0);
 # Damping parameters:
@@ -98,7 +102,7 @@ project_root = '/shared/users/asousa/WIPP/lightning_power_study/'
 raytracer_root = '/shared/users/asousa/software/raytracer_v1.17/'
 damping_root = '/shared/users/asousa/software/damping/'
 ray_bin_dir    = os.path.join(raytracer_root, 'bin')
-ray_out_dir = os.path.join(project_root, 'rays','globes','gcpm_kp0')
+ray_out_dir = os.path.join(project_root, 'rays','nightside','ngo_dipole')
 
 # GCPM grid to use (plasmasphere model)
 if modelnum==1:
@@ -274,110 +278,112 @@ if run_rays:
             damp_templog  = os.path.join(working_path,        "damp_%g_%g_%g.log"%(inp[3], inp[1], inp[2])) 
             damp_logfile  = os.path.join(ray_out_dir, "logs", "damp_%g_%g_%g.log"%(inp[3], inp[1], inp[2]))
 
-            # print "Cleaning previous runs..."
-            if os.path.exists(ray_inpfile):
+
+            if not os.path.exists(ray_outfile):
+                # # print "Cleaning previous runs..."
+                # if os.path.exists(ray_inpfile):
+                #     os.remove(ray_inpfile)
+                # if os.path.exists(ray_outfile):
+                #     os.remove(ray_outfile)
+
+                # Rotate from geomagnetic to SM cartesian coordinates
+                inp_coords = xf.rllmag2sm(inp, ray_datenum)
+                # inp_coords = xf.s2c(inp)
+
+                # Write ray to the input file (used by the raytracer):
+                f = open(ray_inpfile,'w')
+                pos0 = inp_coords
+                dir0 = pos0/np.linalg.norm(pos0)    # radial outward
+
+                # Bo   = bmodel_dipole(inp)
+                # Bo[0]= -1.*np.abs(Bo[0])  # Southern hemi points down... 
+                # Bo_t = xf.transform_data_sph2car(inp[1], inp[2], Bo)
+                # Bo_c = xf.mag2sm(Bo_t, ray_datenum)
+                # dir0 = Bo_c/(-1.0*np.linalg.norm(Bo_c))  # Parallel to B (dipole model)
+
+                # print pos0/np.linalg.norm(pos0)
+                # print dir0
+                # dir0 = -1.0*Bo_c/np.linalg.norm(Bo_c)
+                # print dir0
+
+                # dir0 = [0, 0, 1] # [pos0[0], pos0[1], 0]/(np.sqrt(pos0[0]**2 + pos0[1]**2))
+                w0   = inp[3]*2.0*np.pi
+                f.write('%1.15e %1.15e %1.15e %1.15e %1.15e %1.15e %1.15e\n'%(pos0[0], pos0[1], pos0[2], dir0[0], dir0[1], dir0[2], w0))
+                f.close()
+
+                # --------- Run raytracer --------
+
+                cmd= '%s/raytracer --outputper=%d --dt0=%g --dtmax=%g'%(ray_bin_dir, 1, dt0, dtmax) + \
+                     ' --tmax=%g --root=%d --fixedstep=%d --maxerr=%g'%(t_max, root, fixedstep, maxerr) + \
+                     ' --maxsteps=%d --minalt=%d --inputraysfile=%s --outputfile=%s'%( maxsteps, minalt, ray_inpfile, ray_tempfile) + \
+                     ' --modelnum=%d --yearday=%s --milliseconds_day=%d'%(modelnum, yearday, milliseconds_day) + \
+                     ' --use_tsyganenko=%d --use_igrf=%d --tsyganenko_Pdyn=%g'%(use_tsyg, use_IGRF, Pdyn) + \
+                     ' --tsyganenko_Dst=%g --tsyganenko_ByIMF=%g --tsyganenko_BzIMF=%g'%( Dst, ByIMF, BzIMF ) + \
+                     ' --tsyganenko_W1=%g --tsyganenko_W2=%g --tsyganenko_W3=%g'%(W[0], W[1], W[2]) + \
+                     ' --tsyganenko_W4=%g --tsyganenko_W5=%g --tsyganenko_W6=%g'%(W[3], W[4], W[5])
+
+                # Append model-specific parameters to the command line
+                if  modelnum == 1:
+                    cmd += ' --ngo_configfile=%s'%configfile
+                elif modelnum == 2:
+                    cmd += ' --gcpm_kp=%g'%Kp
+                elif modelnum == 3: 
+                    cmd += ' --interp_interpfile=%s'%interpfile
+                elif modelnum == 4:
+                    cmd += ' --interp_interpfile=%s'%interpfile
+                    cmd += ' --scattered_interp_window_scale=%g'%scattered_interp_window_scale
+                    cmd += ' --scattered_interp_order=%d'%scattered_interp_order
+                    cmd += ' --scattered_interp_exact=%d'%scattered_interp_exact
+                    cmd += ' --scattered_interp_local_window_scale=%g'%scattered_interp_local_window_scale
+
+
+                # Run the raytracer
+
+                print "%s/%d: %s"%(host, rank, cmd)
+                # runlog = subprocess.check_output(cmd, shell=True)
+
+
+                # use this syntax to write logfiles as we go
+                file = open(ray_templog, "w+")
+                subprocess.call(cmd, shell=True, stdout=file)
+                file.close()
+
+
+
+                # with open(ray_templog,"w") as file:
+                #     file.write(runlog)
+                #     file.close()
+
+                # ------- Run Damping Code ------------
+
+                damp_cmd =  '%sbin/damping --inp_file %s --out_file %s '%(damping_root, ray_tempfile, damp_tempfile) + \
+                            '--Kp %g --AE %g --mode %d'%(Kp, AE, damp_mode) + \
+                            ' --yearday %s --msec %d'%(yearday, milliseconds_day)
+
+                print "%s/%d: %s"%(host, rank, damp_cmd)
+                file = open(damp_templog, "w+")
+                subprocess.call(damp_cmd, shell=True, stdout=file)
+                file.close()
+
+                damplog = subprocess.check_output(damp_cmd, shell=True)
+         
+                # with open(damp_templog,"w") as file:
+                #     file.write(damplog)
+                #     file.close()
+
+
+                # Move completed files to the output directory
+                if (not os.path.exists(ray_out_subdir)):
+                    print "Process %d on %s can't find the path at %s"%(rank, host, ray_out_subdir)
+                else:
+                    # shutil.move(ray_tempfile,  ray_outfile)     # ray
+                    # shutil.move(damp_tempfile, damp_outfile)    # damp
+                    os.system('mv %s %s'%(ray_tempfile,  ray_outfile))
+                    os.system('mv %s %s'%(damp_tempfile, damp_outfile))
+                    shutil.move(ray_templog,   ray_logfile)     # ray log
+                    shutil.move(damp_templog,  damp_logfile)    # damp log
+
                 os.remove(ray_inpfile)
-            if os.path.exists(ray_outfile):
-                os.remove(ray_outfile)
-
-            # Rotate from geomagnetic to SM cartesian coordinates
-            inp_coords = xf.rllmag2sm(inp, ray_datenum)
-            # inp_coords = xf.s2c(inp)
-
-            # Write ray to the input file (used by the raytracer):
-            f = open(ray_inpfile,'w')
-            pos0 = inp_coords
-            dir0 = pos0/np.linalg.norm(pos0)    # radial outward
-
-            # Bo   = bmodel_dipole(inp)
-            # Bo[0]= -1.*np.abs(Bo[0])  # Southern hemi points down... 
-            # Bo_t = xf.transform_data_sph2car(inp[1], inp[2], Bo)
-            # Bo_c = xf.mag2sm(Bo_t, ray_datenum)
-            # dir0 = Bo_c/(-1.0*np.linalg.norm(Bo_c))  # Parallel to B (dipole model)
-
-            # print pos0/np.linalg.norm(pos0)
-            # print dir0
-            # dir0 = -1.0*Bo_c/np.linalg.norm(Bo_c)
-            # print dir0
-
-            # dir0 = [0, 0, 1] # [pos0[0], pos0[1], 0]/(np.sqrt(pos0[0]**2 + pos0[1]**2))
-            w0   = inp[3]*2.0*np.pi
-            f.write('%1.15e %1.15e %1.15e %1.15e %1.15e %1.15e %1.15e\n'%(pos0[0], pos0[1], pos0[2], dir0[0], dir0[1], dir0[2], w0))
-            f.close()
-
-            # --------- Run raytracer --------
-
-            cmd= '%s/raytracer --outputper=%d --dt0=%g --dtmax=%g'%(ray_bin_dir, 1, dt0, dtmax) + \
-                 ' --tmax=%g --root=%d --fixedstep=%d --maxerr=%g'%(t_max, root, fixedstep, maxerr) + \
-                 ' --maxsteps=%d --minalt=%d --inputraysfile=%s --outputfile=%s'%( maxsteps, minalt, ray_inpfile, ray_tempfile) + \
-                 ' --modelnum=%d --yearday=%s --milliseconds_day=%d'%(modelnum, yearday, milliseconds_day) + \
-                 ' --use_tsyganenko=%d --use_igrf=%d --tsyganenko_Pdyn=%g'%(use_tsyg, use_IGRF, Pdyn) + \
-                 ' --tsyganenko_Dst=%g --tsyganenko_ByIMF=%g --tsyganenko_BzIMF=%g'%( Dst, ByIMF, BzIMF ) + \
-                 ' --tsyganenko_W1=%g --tsyganenko_W2=%g --tsyganenko_W3=%g'%(W[0], W[1], W[2]) + \
-                 ' --tsyganenko_W4=%g --tsyganenko_W5=%g --tsyganenko_W6=%g'%(W[3], W[4], W[5])
-
-            # Append model-specific parameters to the command line
-            if  modelnum == 1:
-                cmd += ' --ngo_configfile=%s'%configfile
-            elif modelnum == 2:
-                cmd += ' --gcpm_kp=%g'%Kp
-            elif modelnum == 3: 
-                cmd += ' --interp_interpfile=%s'%interpfile
-            elif modelnum == 4:
-                cmd += ' --interp_interpfile=%s'%interpfile
-                cmd += ' --scattered_interp_window_scale=%g'%scattered_interp_window_scale
-                cmd += ' --scattered_interp_order=%d'%scattered_interp_order
-                cmd += ' --scattered_interp_exact=%d'%scattered_interp_exact
-                cmd += ' --scattered_interp_local_window_scale=%g'%scattered_interp_local_window_scale
-
-
-            # Run the raytracer
-
-            print "%s/%d: %s"%(host, rank, cmd)
-            # runlog = subprocess.check_output(cmd, shell=True)
-
-
-            # use this syntax to write logfiles as we go
-            file = open(ray_templog, "w+")
-            subprocess.call(cmd, shell=True, stdout=file)
-            file.close()
-
-
-
-            # with open(ray_templog,"w") as file:
-            #     file.write(runlog)
-            #     file.close()
-
-            # ------- Run Damping Code ------------
-
-            damp_cmd =  '%sbin/damping --inp_file %s --out_file %s '%(damping_root, ray_tempfile, damp_tempfile) + \
-                        '--Kp %g --AE %g --mode %d'%(Kp, AE, damp_mode) + \
-                        ' --yearday %s --msec %d'%(yearday, milliseconds_day)
-
-            print "%s/%d: %s"%(host, rank, damp_cmd)
-            file = open(damp_templog, "w+")
-            subprocess.call(damp_cmd, shell=True, stdout=file)
-            file.close()
-
-            damplog = subprocess.check_output(damp_cmd, shell=True)
-     
-            # with open(damp_templog,"w") as file:
-            #     file.write(damplog)
-            #     file.close()
-
-
-            # Move completed files to the output directory
-            if (not os.path.exists(ray_out_subdir)):
-                print "Process %d on %s can't find the path at %s"%(rank, host, ray_out_subdir)
-            else:
-                # shutil.move(ray_tempfile,  ray_outfile)     # ray
-                # shutil.move(damp_tempfile, damp_outfile)    # damp
-                os.system('mv %s %s'%(ray_tempfile,  ray_outfile))
-                os.system('mv %s %s'%(damp_tempfile, damp_outfile))
-                shutil.move(ray_templog,   ray_logfile)     # ray log
-                shutil.move(damp_templog,  damp_logfile)    # damp log
-
-            os.remove(ray_inpfile)
 
 comm.Barrier()
 

@@ -57,7 +57,7 @@ $(ODIR)/%.o: $(SRC_DIR)/%.cpp $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS) -L$(LDIR) -fPIC
 
 # Rule to link everything together + generate executable
-main: $(OBJ) $(LDIR)/libxformd.a
+calc_power: $(OBJ) $(LDIR)/libxformd.a
 	$(CC) $(CFLAGS) $(OBJ) -L $(LDIR) $(LIBS) -o $(BDIR)/$@
 
 # Legacy coordinate transforms, used in raytracer

@@ -12,17 +12,6 @@ int main(int argc, char *argv[])
 
 
 
-
-
-
-
-
-
-
-
-
-
-
     // Default arguments:
     //                    alt, lat, lon (geomagnetic)
     double flash_pos[3] = {1, 50, 84};
@@ -40,7 +29,9 @@ int main(int argc, char *argv[])
     double time_max = 10.0;             // Sec
     int num_times = 100;                  
     double max_ground_distance = 1000;  // Km
-    double freq_step_size = 100;        // Hz
+    int num_freqs = 1;
+
+    // double freq_step_size = 100;        // Hz
     // Parse input arguments:
 
 
@@ -59,7 +50,7 @@ int main(int argc, char *argv[])
         {"t_max",         required_argument,    0, 'i'},
         {"max_dist",      required_argument,    0, 'j'},
         {"num_times",     required_argument,    0, 'k'},
-        {"freq_step_size",required_argument,    0, 'l'},
+        {"num_freqs",     required_argument,    0, 'l'},
         {"lat",           required_argument,    0, 'm'},
         {"lon",           required_argument,    0, 'n'},
         
@@ -95,7 +86,7 @@ int main(int argc, char *argv[])
             case 'k':  // num_times
                 num_times = atoi(optarg);                           break;
             case 'l':  // frequency step size 
-                freq_step_size = strtod(optarg, NULL);              break;
+                num_freqs = strtod(optarg, NULL);                   break;
             case 'm':  // input latitude (geomagnetic)
                 flash_pos[1] = strtod(optarg, NULL);                break;
             case 'n':  // input longitude (geomagnetic)
@@ -108,9 +99,10 @@ int main(int argc, char *argv[])
 
 
     double time_step = (1.0*((1.0*time_max)/num_times));
-    int num_freqs = fmax(1,floor((f2 - f1)/freq_step_size));
+    // int num_freqs = fmax(1,ceil((f2 - f1)/freq_step_size));
 
-    freq_step_size = fmin(freq_step_size, fabs(f2 - f1));
+    // freq_step_size = fmin(freq_step_size, fabs(f2 - f1));
+    double freq_step_size = fabs(f2 - f1)/(1.0*num_freqs);
     // // Storage space for the first sweep
     // vector<Vector3d> interp_points[num_freqs];
     // vector<double>   interp_data[num_freqs];
@@ -134,7 +126,7 @@ int main(int argc, char *argv[])
     Vector3d centerpoint;
     double damping_avg;
     double bounding_sphere_radius;
-    int kk;
+    double kk;
     // Array of pointers to single-timestep frames
     rayT cur_frames[8];
     rayT prev_frames[8];
@@ -304,8 +296,10 @@ int main(int argc, char *argv[])
             if (in_lon < lonmin )               { lonmin = in_lon; }
             if (in_lon > lonmax )               { lonmax = in_lon; }
             if (cur_rays[i].time.back() < tmax){ tmax = cur_rays[i].time.back(); }
-        }
 
+            cout << cur_rays[i].w/2/PI << " " << cur_rays[i].in_lat << " " << cur_rays[i].in_lon << " " << cur_rays[i].time.back() << endl;
+        }
+        
         tmax = min(tmax, time_max);
 
         // starting separation in lat, lon directions (meters)
@@ -351,7 +345,9 @@ int main(int argc, char *argv[])
 
             // for (double kk=0; kk < 1; kk += 1./num_freqs_fine) {
             for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
-                kk = k_ind/num_freqs;
+                kk = (1.0*k_ind)/(1.0*num_freqs);
+                cout << tt << " " << k_ind << " " << num_freqs << endl;
+
 
                 // interpolate corners over frequency axis:
                 for (int i=0; i<4; ++i) {
@@ -376,6 +372,10 @@ int main(int argc, char *argv[])
                 damping_avg /=8.0;
 
                 // cout << tt << endl;
+                // double cur_step_size = f2 - (f2*kk + f1*(1.0 - kk));
+                // cout << "freq_step_size: " << freq_step_size;
+                // cout << " kk: " << kk;
+                // cout << " cur_step_size: " << cur_step_size << endl;
                 interp_points[k_ind][set_index].push_back(centerpoint);
                 double cur_pwr = (inp_pwr/frame_area)*damping_avg*freq_step_size;
                 interp_data[k_ind][set_index].push_back(cur_pwr);
@@ -389,6 +389,16 @@ int main(int argc, char *argv[])
             }
         // Step forward one frame:
         for (int zz=0; zz<8; zz++) { prev_frames[zz] = cur_frames[zz]; }        }
+
+        cout << "lengths of each  vector: ";
+
+        for (int ii=0; ii<num_freqs; ii++) {
+            cout << interp_data[ii][set_index].size() << " ";
+        }
+        cout << endl;
+
+
+
 
         }
 
@@ -414,30 +424,40 @@ int main(int argc, char *argv[])
         // Just write all these values to a file, so you can dick with them in Python.
 
 
-        // Find the minimum length of the set:
-        int min_num_times = num_times;
+        // // Find the minimum length of the set:
+        // int min_num_times = num_times;
 
-        for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
-            for (int i_ind = 0; i_ind < num_power_vects; i_ind++) {
-                if (interp_data[k_ind][i_ind].size() < min_num_times) {
-                    min_num_times = interp_data[k_ind][i_ind].size();
-                }
-            }
-        }
+        // for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
+        //     for (int i_ind = 0; i_ind < num_power_vects; i_ind++) {
+
+        //         // cout << k_ind << " " << i_ind << " size: " << interp_data[k_ind][i_ind].size() << endl;
+        //         if (interp_data[k_ind][i_ind].size() < min_num_times) {
+        //             min_num_times = interp_data[k_ind][i_ind].size();
+        //         }
+        //     }
+        // }
         
         cout << "requested timesteps: " << num_times;
-        cout << " Actual timesteps: " << min_num_times << endl;
+        // cout << " Actual timesteps: " << min_num_times << endl;
         FILE* outfile; 
         outfile = fopen(outfile_name.c_str(),"wb");
         if (outfile==NULL) {
             cout << "failed to open output file ;~;" << endl;
         } else {
 
-            fprintf(outfile, "%d\t%d\t%d\t",num_freqs, num_power_vects, min_num_times);
+            fprintf(outfile, "%d\t%d\t",num_freqs, num_power_vects);
+            // fwrite(&num_freqs,sizeof(int),1,outfile);
+
+            // Print lengths of each vector at the top of the file
+            for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
+                for (int i_ind = 0; i_ind < num_power_vects; i_ind++) {
+                    fprintf(outfile, "%i ",interp_data[k_ind][i_ind].size());
+                }
+            }
 
             for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
                 for (int i_ind = 0; i_ind < num_power_vects; i_ind++) {
-                    for (int t_ind = 0; t_ind < min_num_times; ++t_ind) {
+                    for (int t_ind = 0; t_ind < interp_data[k_ind][i_ind].size(); ++t_ind) {
                         fprintf(outfile,"%g\t%g\t%g\t%g\t",
                             interp_points[k_ind][i_ind][t_ind][0],
                             interp_points[k_ind][i_ind][t_ind][1],
