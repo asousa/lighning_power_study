@@ -58,8 +58,8 @@ def interp_onto_grid(fname, xlims, ylims, zlims, step_size, method='linear'):
 
 
     # Output space
-    data = np.zeros([nx, ny, nz])
-
+    data_total = np.zeros([nx, ny, nz])
+    
     starting_coords = dgrid[0,:,0,0:3]
 
     sc_polar = np.array([c2p3(np.array(row)) for row in starting_coords])
@@ -75,13 +75,14 @@ def interp_onto_grid(fname, xlims, ylims, zlims, step_size, method='linear'):
     adj_inds = np.array(tris.simplices)
 
     for f_ind in range(nf):
+        data = np.zeros([nx, ny, nz])
         for t in range(0,nt-1):
             hits = np.zeros([nx, ny, nz])
             for adj_row in adj_inds:
                 # Check max length of each vector:
                 cur_t = min(dlengths[adj_row])
                 
-                if t < cur_t:
+                if t < (cur_t - 1):
                     points = dgrid[f_ind,adj_row,t:t+2,0:3]
                     vals = dgrid[f_ind,adj_row,t:t+2,3]
                     vals_flat = vals.ravel()
@@ -129,15 +130,16 @@ def interp_onto_grid(fname, xlims, ylims, zlims, step_size, method='linear'):
             # Average any bins which got more than one hit at this timestep:
             # (this should just be the edges and corners)
             data[hits!=0] /= hits[hits!=0]  
+        data_total += data   # add the result from this frequency step to the total
 
-    return data
+    return data_total
 
 
 
 
 
 # Plot average power on each axis:
-def plot_avg_power_3up(data, xlims, ylims, zlims, step_size):
+def plot_avg_power_3up(data, xlims, ylims, zlims, step_size, clims=None):
     R_E = 6371e3
     H_IONO = 1000e3
 
@@ -154,11 +156,13 @@ def plot_avg_power_3up(data, xlims, ylims, zlims, step_size):
     yz_sum = np.log10((np.sum(data, axis=0).T)/len(xx))
     
     # print "xz min, max: ", np.min(xz_sum), np.max(xz_sum)
-
+ 
     maxlog = np.ceil(np.max([xz_sum, xy_sum, yz_sum]))
 
     # Show about 3 orders of magnitude
-    clims = [maxlog - 3, maxlog]
+    if clims is None:
+        clims = [maxlog - 3, maxlog]
+
     xy_sum[np.isinf(xy_sum)] = -100
     xz_sum[np.isinf(xz_sum)] = -100
     yz_sum[np.isinf(yz_sum)] = -100
@@ -206,6 +210,85 @@ def plot_avg_power_3up(data, xlims, ylims, zlims, step_size):
 
     
     fig.tight_layout()
+
+
+# Plot average power on each axis:
+def plot_avg_power_2up(data, xlims, ylims, zlims, step_size, clims=None):
+    R_E = 6371e3
+    H_IONO = 1000e3
+
+    xx = np.arange(xlims[0], xlims[1], step_size)
+    yy = np.arange(ylims[0], ylims[1], step_size)
+    zz = np.arange(zlims[0], zlims[1], step_size)
+
+    nx = len(xx) 
+    ny = len(yy)
+    nz = len(zz)
+
+    # xz_vals = np.log10((np.sum(data, axis=1).T))
+    # xy_vals = np.log10((np.sum(data, axis=2).T))
+    # yz_vals = np.log10((np.sum(data, axis=0).T))
+
+    xz_vals = np.log10((np.sum(data, axis=1).T))
+    xy_vals = np.log10((np.sum(data, axis=2).T))
+    # yz_vals = np.log10((np.sum(data, axis=0).T))
+    
+    # print "xz min, max: ", np.min(xz_sum), np.max(xz_sum)
+ 
+    maxlog = np.ceil(np.max([xz_vals, xy_vals]))
+
+    # Show about 3 orders of magnitude
+    if clims is None:
+        clims = [maxlog - 3, maxlog]
+        
+    xy_vals[np.isinf(xy_vals)] = -100
+    xz_vals[np.isinf(xz_vals)] = -100
+    # yz_vals[np.isinf(yz_vals)] = -100
+
+
+
+    fig, ax = plt.subplots(1,2)
+    # Plot the earth
+    for i in [0, 1]:
+        earth = plt.Circle((0,0),1,color='0.5',alpha=1, zorder=100)
+        iono  = plt.Circle((0,0),(R_E + H_IONO)/R_E, color='w',alpha=0.6, zorder=99)
+        ax[i].add_patch(earth)   
+        ax[i].add_patch(iono)
+    
+    p0 = ax[0].pcolorfast(xx, yy, xy_vals, vmin=clims[0], vmax=clims[1])
+    p1 = ax[1].pcolorfast(xx, zz, xz_vals, vmin=clims[0], vmax=clims[1])
+    # p2 = ax[2].pcolorfast(yy, zz, yz_sum, vmin=clims[0], vmax=clims[1])
+
+    divider = make_axes_locatable(ax[1])
+    cax = divider.append_axes("right",size="4%",pad=0.15)
+    cb = plt.colorbar(p1, cax=cax)
+    cb.set_label('Peak energy density (Joules/m$^3$)')
+    cticks = np.arange(clims[0],clims[1] + 1)
+    cb.set_ticks(cticks)
+    cticklabels = ['$10^{%d}$'%k for k in cticks]
+    cb.set_ticklabels(cticklabels)
+    
+#     ax[0].set_aspect('equal')
+#     ax[1].set_aspect('equal')
+#     ax[2].set_aspect('equal')
+
+    ax[0].set_title('XY')
+    ax[1].set_title('XZ')
+    # ax[2].set_title('YZ')
+    
+    ax[0].set_xlim([xx[0],xx[-1]])
+    ax[0].set_ylim([yy[0],yy[-1]])
+    ax[1].set_xlim([xx[0],xx[-1]])
+    ax[1].set_ylim([zz[0],zz[-1]])
+    # ax[2].set_xlim([yy[0],yy[-1]])
+    # ax[2].set_ylim([zz[0],zz[-1]])
+    
+    
+    
+
+    
+    fig.tight_layout()
+
 
 
 

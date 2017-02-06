@@ -23,7 +23,7 @@ int main(int argc, char *argv[])
 
     double f1 = 200;
     double f2 = 230;
-    int iyr = 2001;
+    int iyr = 2010;
     int idoy = 001;
     int isec = 0;
     double time_max = 10.0;             // Sec
@@ -97,6 +97,8 @@ int main(int argc, char *argv[])
     }
 
 
+    vector < Vector3d > prev_pos(num_freqs);
+    vector < Vector3d > cur_pos(num_freqs);
 
     double time_step = (1.0*((1.0*time_max)/num_times));
     // int num_freqs = fmax(1,ceil((f2 - f1)/freq_step_size));
@@ -119,7 +121,8 @@ int main(int argc, char *argv[])
     // int num_freqs_fine;
     double frame_area, initial_area;
 
-    Vector3d cell_pos;
+    // Vector3d cell_pos;
+    double path_length;
 
     Vector3d corners[8];
     double damping_at_corners[8];
@@ -137,6 +140,16 @@ int main(int argc, char *argv[])
     itime_in[0] = yearday;
     itime_in[1] = isec*1e3;
 
+
+    // effective pulse length, in seconds:
+    // (Length of an equivalent square-shaped pulse 
+    // with the same power as the double exponential distribution,
+    // and with amplitude equal to the peak of the double exponential.
+    // Is this reasonable? Eh, sure, why not.)
+    // (~ basically 0.13 msec)
+    double Tpulse = pow((P_A/P_B), 2*P_A/(P_A-P_B))*pow(P_B*(P_A-P_B),2)/
+                        ( 2*P_A*pow(P_A-P_B,2)*P_B*(P_A+P_B));
+    // cout << "Teff: " << Tpulse << endl;
 
 
     // Talk about yaself
@@ -313,26 +326,32 @@ int main(int argc, char *argv[])
         cout << "f: " << wmax/(2*PI) << ", " << wmin/(2*PI) << " Hz\n"; 
         cout << "Avg distance from flash: " << avg_distance_from_flash << " km\n";
 
-        // Scale the input power by dlat, dlon, dw:
-        // (ray spacing may not be consistent)
-        double inp_pwr = 0;
-
-        inp_pwr = total_input_power(flash_pos_sm, flash_I0, 
-                                    latmin, latmax, lonmin, lonmax, wmin, wmax, itime_in);
-        cout << "input power: " << inp_pwr << " Watts\n";
-
-
+        // Get total input power within each frequency band:
+        double inp_pwr[num_freqs];
+        for (int nf = 0; nf<num_freqs; ++nf) {
+            double wlo = wmin + nf*dw/num_freqs;
+            double whi = wmin + (nf + 1)*dw/num_freqs;
+            inp_pwr[nf] = total_input_power(flash_pos_sm, flash_I0, 
+                                        latmin, latmax, lonmin, lonmax, wlo, whi, itime_in);
+            cout << "input power between " << wlo/2./PI << " and " << whi/2./PI << " : " << inp_pwr[nf] << " Watts\n";
+        }
 
         // --------------------- Interpolate + sum over output grid ----------------
         //                                ( The main event)            
         // -------------------------------------------------------------------------
         time(&run_tstart);
+
+
         // Interpolate the first frames:
         for (int zz=0; zz<8; zz++) { 
             interp_rayF(&cur_rays[zz], &(prev_frames[zz]), 0); 
             corners[zz] = prev_frames[zz].pos;
+            for (int k_ind=0; k_ind<num_freqs; k_ind++) {
+                prev_pos[k_ind] += prev_frames[zz].pos;
+            }
         }
-
+    
+        for (int k_ind=0; k_ind<num_freqs; k_ind++) {prev_pos[k_ind] /= 8.0; }
 
 
         // Initial area (only needed if you're calculating relative spreading instead of absolute)
@@ -345,8 +364,9 @@ int main(int argc, char *argv[])
 
             // for (double kk=0; kk < 1; kk += 1./num_freqs_fine) {
             for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
+
                 kk = (1.0*k_ind)/(1.0*num_freqs);
-                cout << tt << " " << k_ind << " " << num_freqs << endl;
+                // cout << tt << " " << k_ind << " " << num_freqs << endl;
 
 
                 // interpolate corners over frequency axis:
@@ -356,29 +376,34 @@ int main(int argc, char *argv[])
                     damping_at_corners[i] = cur_frames[i].damping*kk + cur_frames[i+4].damping*(1-kk);
                     damping_at_corners[i+4] = prev_frames[i].damping*kk + prev_frames[i+4].damping*(1-kk);
                 }
+                
+                // Just grabbing the value at the center point: Average from all corners.
+                cur_pos[k_ind][0] = 0; cur_pos[k_ind][1] = 0; cur_pos[k_ind][2] = 0;
+                damping_avg = 0;
+                for (int i=0; i<8; ++i) {
+                    cur_pos[k_ind] += corners[i];
+                    damping_avg += damping_at_corners[i];
+                }
+                cur_pos[k_ind] /=8.0;
+                damping_avg /=8.0;
+
 
                 // Get frame area for geometric factor:
                 frame_area = polygon_frame_area(corners);
 
+                // Get path length for energy density:
+                path_length = (cur_pos[k_ind] - prev_pos[k_ind]).norm()*R_E;
+                // cout << "prev_pos: " << prev_pos[k_ind].transpose() << " cur_pos: " << cur_pos[k_ind].transpose() << " ";
+                // cout << "path length: " << path_length/R_E << endl;
+                
+                
+                interp_points[k_ind][set_index].push_back(cur_pos[k_ind]);
+                //                            (    Watts /      m^2)   ( unitless ) (Sec) / Meters  ~ Joules/m^3
+                double cur_energy_density = (inp_pwr[k_ind]/frame_area)*damping_avg*Tpulse/path_length;
+                interp_data[k_ind][set_index].push_back(cur_energy_density);
 
-                // Just grabbing the value at the center point: Average from all corners.
-                centerpoint[0] = 0; centerpoint[1] = 0; centerpoint[2] = 0;
-                damping_avg = 0;
-                for (int i=0; i<8; ++i) {
-                    centerpoint += corners[i];
-                    damping_avg += damping_at_corners[i];
-                }
-                centerpoint /=8.0;
-                damping_avg /=8.0;
-
-                // cout << tt << endl;
-                // double cur_step_size = f2 - (f2*kk + f1*(1.0 - kk));
-                // cout << "freq_step_size: " << freq_step_size;
-                // cout << " kk: " << kk;
-                // cout << " cur_step_size: " << cur_step_size << endl;
-                interp_points[k_ind][set_index].push_back(centerpoint);
-                double cur_pwr = (inp_pwr/frame_area)*damping_avg*freq_step_size;
-                interp_data[k_ind][set_index].push_back(cur_pwr);
+                // double cur_pwr = (inp_pwr/frame_area)*damping_avg*freq_step_size;
+                // interp_data[k_ind][set_index].push_back(cur_pwr);
 
                 // // Quantize and add to grid
                 // x_ind = nearest(xaxis, NX, centerpoint[0], false);
@@ -386,19 +411,18 @@ int main(int argc, char *argv[])
                 // z_ind = nearest(zaxis, NX, centerpoint[2], false);
 
                 // out_grid[x_ind][y_ind][z_ind] += cur_pwr;
+                prev_pos[k_ind] = cur_pos[k_ind];
             }
-        // Step forward one frame:
-        for (int zz=0; zz<8; zz++) { prev_frames[zz] = cur_frames[zz]; }        }
+
+            // Step forward one frame:
+            for (int zz=0; zz<8; zz++) { prev_frames[zz] = cur_frames[zz]; }        
+        }
 
         cout << "lengths of each  vector: ";
-
         for (int ii=0; ii<num_freqs; ii++) {
             cout << interp_data[ii][set_index].size() << " ";
         }
         cout << endl;
-
-
-
 
         }
 

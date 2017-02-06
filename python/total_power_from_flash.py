@@ -15,8 +15,11 @@ ylims = [-2.5,2.5]
 zlims = [-2.5,2.5]
 grid_step_size = 0.02
 
-inp_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/nightside/ngo_igrf/'
-out_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/nightside/ngo_igrf/'
+flash_lat = 50
+
+inp_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/nightside/ngo_dipole/lat_%d'%flash_lat
+# out_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/nightside/ngo_dipole/lat_%d'%flash_lat
+out_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/nightside/test_figs'
 
 
 
@@ -62,7 +65,7 @@ for file in avail_files:
         data_total += data
 
 
-plot_avg_power_3up(data_total, xlims, ylims, zlims, grid_step_size)
+plot_avg_power_3up(data_total, xlims, ylims, zlims, grid_step_size, clims=[-12,-5])
 plt.savefig(os.path.join(out_dir,"figure_TOTAL.png"),ldpi=300)
 plt.close('all')
 

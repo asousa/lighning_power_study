@@ -43,18 +43,18 @@ R_E = 6371
 
 
 # -------------- Simulation params ---------------------
-t_max = 10.     # Maximum duration in seconds
+t_max = 20.     # Maximum duration in seconds
 
 dt0 = 1e-3      # Initial timestep in seconds
-dtmax = 1e-1    # Maximum allowable timestep in seconds
+dtmax = 5e-2    # Maximum allowable timestep in seconds
 root = 2        # Which root of the Appleton-Hartree equation
                 # (1 = negative, 2 = positive)
                 # (2=whistler in magnetosphere)
 fixedstep = 0   # Don't use fixed step sizes, that's a bad idea.
 maxerr = 5e-3   # Error bound for adaptive timestepping
 maxsteps = 1e5  # Max number of timesteps (abort if reached)
-modelnum = 1    # Which model to use (1 = ngo, 2=GCPM, 3=GCPM interp, 4=GCPM rand interp)
-use_IGRF = 0    # Magnetic field model (1 for IGRF, 0 for dipole)
+modelnum = 2    # Which model to use (1 = ngo, 2=GCPM, 3=GCPM interp, 4=GCPM rand interp)
+use_IGRF = 1    # Magnetic field model (1 for IGRF, 0 for dipole)
 use_tsyg = 0    # Use the Tsyganenko magnetic field model corrections
 
 minalt   = (R_E + 500)*1e3 # cutoff threshold in meters
@@ -69,13 +69,27 @@ run_rays   = True
 # dt0_lowf = 1e-2
 
 # ---------------- Input parameters --------------------
+ray_datenum = dt.datetime(2010, 1, 1, 00, 00, 00);
 
-inp_lats = np.arange(10, 61, 5) #[35] #np.arange(30, 61, 5) #[40, jh41, 42, 43]
-# inp_lons = np.arange(0, 360, 5)
+yearday = '%d%03d'%(ray_datenum.year, ray_datenum.timetuple().tm_yday)
+milliseconds_day = (ray_datenum.second + ray_datenum.minute*60 + ray_datenum.hour*60*60)*1e3 + ray_datenum.microsecond*1e-3
+# Coordinate transformation library
+xf = xflib.xflib(lib_path='/shared/users/asousa/WIPP/3dWIPP/python/libxformd.so')
 
-# Nightside -- at midnight, nightside is ~84 deg longitude.
-inp_lons = np.arange(65, 106, 2)
+inp_lats = np.arange(10, 61, 2) #[35] #np.arange(30, 61, 5) #[40, jh41, 42, 43]
+# inp_lats = [10,12,14]
+# Get solar and antisolar points:
+sun = xf.gse2sm([-1,0,0], ray_datenum)
+sun_geomag_midnight = np.round(xf.sm2rllmag(sun, ray_datenum))
+sun = xf.gse2sm([1,0,0], ray_datenum)
+sun_geomag_noon = np.round(xf.sm2rllmag(sun, ray_datenum))
 
+
+# # Nightside
+inp_lons = np.arange(sun_geomag_midnight[2] - 20, sun_geomag_midnight[2] + 20, 2)
+
+# Dayside
+# inp_lons = np.arange(sun_geomag_noon[2] - 20, sun_geomag_noon[2] + 20, 2)
 
 #np.arange(0, 360, 5) #[0, 90, 180, 270] #np.arange(0, 360, 5) 
 
@@ -93,8 +107,7 @@ freqs = np.round(pow(10, flogs)/10.)*10
 # freqs = [200, 1000, 10000, 30000]
 # freqs = [1000]
 # Simulation timejh
-# ray_datenum = dt.datetime(2010, 1, 1, 00, 00, 00);
-ray_datenum = dt.datetime(2001, 1, 1, 0, 0, 0);
+
 # Damping parameters:
 damp_mode = 1  # 0 for old 2d damping code, 1 for modern code
 
@@ -102,7 +115,8 @@ project_root = '/shared/users/asousa/WIPP/lightning_power_study/'
 raytracer_root = '/shared/users/asousa/software/raytracer_v1.17/'
 damping_root = '/shared/users/asousa/software/damping/'
 ray_bin_dir    = os.path.join(raytracer_root, 'bin')
-ray_out_dir = os.path.join(project_root, 'rays','nightside','ngo_dipole')
+# ray_out_dir = os.path.join(project_root, 'rays','dayside','ngo_igrf')
+ray_out_dir = '/shared/users/asousa/WIPP/rays/nightside/gcpm_kp0'
 
 # GCPM grid to use (plasmasphere model)
 if modelnum==1:
@@ -232,12 +246,6 @@ if rank==0:
 
 
 
-yearday = '%d%03d'%(ray_datenum.year, ray_datenum.timetuple().tm_yday)
-milliseconds_day = (ray_datenum.second + ray_datenum.minute*60 + ray_datenum.hour*60*60)*1e3 + ray_datenum.microsecond*1e-3
-
-# Coordinate transformation library
-xf = xflib.xflib(lib_path='/shared/users/asousa/WIPP/3dWIPP/python/libxformd.so')
-
 
 if rank == 0:
     print "Dst: ", Dst
@@ -280,6 +288,7 @@ if run_rays:
 
 
             if not os.path.exists(ray_outfile):
+                print "doing", ray_outfile 
                 # # print "Cleaning previous runs..."
                 # if os.path.exists(ray_inpfile):
                 #     os.remove(ray_inpfile)
@@ -310,6 +319,7 @@ if run_rays:
                 w0   = inp[3]*2.0*np.pi
                 f.write('%1.15e %1.15e %1.15e %1.15e %1.15e %1.15e %1.15e\n'%(pos0[0], pos0[1], pos0[2], dir0[0], dir0[1], dir0[2], w0))
                 f.close()
+                print "inputs: ", pos0, dir0, w0
 
                 # --------- Run raytracer --------
 
@@ -443,7 +453,9 @@ if (dump_model):
             nz = 200
 
 
-        model_outfile='model_dump_mode%d_%d_%s.dat'%(modelnum, use_IGRF, plane)
+        # model_outfile='model_dump_mode%d_%d_%s.dat'%(modelnum, use_IGRF, plane)
+        model_outfile='model_dump_%s.dat'%(plane)
+
         cmd = '%s '%os.path.join(ray_bin_dir, 'dumpmodel') +\
                 ' --modelnum=%d --yearday=%s --milliseconds_day=%d '%(modelnum, yearday, milliseconds_day) + \
                 '--minx=%g --maxx=%g '%(minx, maxx) +\
