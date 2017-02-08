@@ -18,7 +18,7 @@ ray_datenum = dt.datetime(2010, 1, 1, 00, 00, 00);
 # Coordinate transformation library
 xf = xflib.xflib(lib_path='/shared/users/asousa/WIPP/3dWIPP/python/libxformd.so')
 
-inp_lats = np.arange(10, 61, 2) #[35] #np.arange(30, 61, 5) #[40, jh41, 42, 43]
+inp_lats = np.arange(15, 61, 2) #[35] #np.arange(30, 61, 5) #[40, jh41, 42, 43]
 # inp_lons = np.arange(0, 360, 5)
 
 # Get solar and antisolar points:
@@ -44,7 +44,7 @@ project_root = '/shared/users/asousa/WIPP/lightning_power_study/'
 raytracer_root = '/shared/users/asousa/software/raytracer_v1.17/'
 damping_root = '/shared/users/asousa/software/damping/'
 ray_bin_dir    = os.path.join(raytracer_root, 'bin')
-ray_out_dir = '/shared/users/asousa/WIPP/rays/nightside/gcpm_kp0'
+ray_out_dir = '/shared/users/asousa/WIPP/rays/12sec/nightside/ngo_dipole'
 
 missing_rays = 0
 missing_damp = 0

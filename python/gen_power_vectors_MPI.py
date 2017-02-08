@@ -29,15 +29,15 @@ effs = zip(freqs[0:-1], freqs[1:])
 
 
 
-ray_inp_dir = '/shared/users/asousa/WIPP/rays/nightside/ngo_igrf'
-file_out_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/testing/'
+ray_inp_dir = '/shared/users/asousa/WIPP/rays/ngo_dipole'
+file_out_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/nightside/ngo_dipole/'
 run_path = '/shared/users/asousa/WIPP/lightning_power_study/bin/calc_power'
 
-time_max = 20
-num_times = 200
-max_ground_distance = 2000
+time_max = 15
+num_times = 150
+max_ground_distance = 1200
 # flash_lats = [20, 30, 40, 50]
-flash_lats = [21, 31, 41, 51]
+flash_lats = [20, 30, 40, 50]
 flash_lon = 76          # antisolar point at 1/1/2010:0:0:0 ~ 25.7 lat, 76.6 lon
 ideal_step_size = 500 # hz
 

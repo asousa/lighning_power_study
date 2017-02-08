@@ -43,7 +43,7 @@ R_E = 6371
 
 
 # -------------- Simulation params ---------------------
-t_max = 20.     # Maximum duration in seconds
+t_max = 12.     # Maximum duration in seconds
 
 dt0 = 1e-3      # Initial timestep in seconds
 dtmax = 5e-2    # Maximum allowable timestep in seconds
@@ -53,20 +53,18 @@ root = 2        # Which root of the Appleton-Hartree equation
 fixedstep = 0   # Don't use fixed step sizes, that's a bad idea.
 maxerr = 5e-3   # Error bound for adaptive timestepping
 maxsteps = 1e5  # Max number of timesteps (abort if reached)
-modelnum = 2    # Which model to use (1 = ngo, 2=GCPM, 3=GCPM interp, 4=GCPM rand interp)
-use_IGRF = 1    # Magnetic field model (1 for IGRF, 0 for dipole)
+modelnum = 1    # Which model to use (1 = ngo, 2=GCPM, 3=GCPM interp, 4=GCPM rand interp)
+use_IGRF = 0    # Magnetic field model (1 for IGRF, 0 for dipole)
 use_tsyg = 0    # Use the Tsyganenko magnetic field model corrections
 
 minalt   = (R_E + 500)*1e3 # cutoff threshold in meters
 
 vec_ind = 0     # Which set of default params to use for the gcpm model
 
-
 dump_model = True
 run_rays   = True
-# # Band-aid parameters to use for lower frequencies:
-# maxerr_lowf = 1e-3
-# dt0_lowf = 1e-2
+
+ray_out_dir = '/shared/users/asousa/WIPP/rays/12sec/nightside/ngo_dipole'
 
 # ---------------- Input parameters --------------------
 ray_datenum = dt.datetime(2010, 1, 1, 00, 00, 00);
@@ -76,7 +74,7 @@ milliseconds_day = (ray_datenum.second + ray_datenum.minute*60 + ray_datenum.hou
 # Coordinate transformation library
 xf = xflib.xflib(lib_path='/shared/users/asousa/WIPP/3dWIPP/python/libxformd.so')
 
-inp_lats = np.arange(10, 61, 2) #[35] #np.arange(30, 61, 5) #[40, jh41, 42, 43]
+inp_lats = np.arange(15, 62, 2) #[35] #np.arange(30, 61, 5) #[40, jh41, 42, 43]
 # inp_lats = [10,12,14]
 # Get solar and antisolar points:
 sun = xf.gse2sm([-1,0,0], ray_datenum)
@@ -116,7 +114,6 @@ raytracer_root = '/shared/users/asousa/software/raytracer_v1.17/'
 damping_root = '/shared/users/asousa/software/damping/'
 ray_bin_dir    = os.path.join(raytracer_root, 'bin')
 # ray_out_dir = os.path.join(project_root, 'rays','dayside','ngo_igrf')
-ray_out_dir = '/shared/users/asousa/WIPP/rays/nightside/gcpm_kp0'
 
 # GCPM grid to use (plasmasphere model)
 if modelnum==1:

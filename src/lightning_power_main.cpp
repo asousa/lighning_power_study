@@ -141,17 +141,6 @@ int main(int argc, char *argv[])
     itime_in[1] = isec*1e3;
 
 
-    // effective pulse length, in seconds:
-    // (Length of an equivalent square-shaped pulse 
-    // with the same power as the double exponential distribution,
-    // and with amplitude equal to the peak of the double exponential.
-    // Is this reasonable? Eh, sure, why not.)
-    // (~ basically 0.13 msec)
-    double Tpulse = pow((P_A/P_B), 2*P_A/(P_A-P_B))*pow(P_B*(P_A-P_B),2)/
-                        ( 2*P_A*pow(P_A-P_B,2)*P_B*(P_A+P_B));
-    // cout << "Teff: " << Tpulse << endl;
-
-
     // Talk about yaself
     cout << "---- power density calculation ---- " << endl;
     cout << "ray dir:\t" << ray_inp_dir << endl;
@@ -164,45 +153,16 @@ int main(int argc, char *argv[])
     cout << "step size:\t" << freq_step_size << " Hz" << endl;
 
 
-    // const int NX = round((XMAX - XMIN)/GRID_STEP_SIZE);
-    // const int NY = round((YMAX - YMIN)/GRID_STEP_SIZE);
-    // const int NZ = round((ZMAX - ZMIN)/GRID_STEP_SIZE);
-
-
-    // double xaxis[NX];
-    // double yaxis[NY];
-    // double zaxis[NZ];
-
-    // int x_ind, y_ind, z_ind;
-    // double ii, jj, kk;
-
-    // for (int i=0; i<NX; ++i) { xaxis[i] = XMIN + i*GRID_STEP_SIZE; }
-    // for (int i=0; i<NY; ++i) { yaxis[i] = YMIN + i*GRID_STEP_SIZE; }
-    // for (int i=0; i<NZ; ++i) { zaxis[i] = ZMIN + i*GRID_STEP_SIZE; }
-
-    // // Set up output grid
-    // cout << "NX: " << NX << " NY: " << NY << " NZ: " << NZ << endl;
-    // double out_grid[NX][NY][NZ];
-
-    // for (int i=0; i<NX; ++i) { for (int j=0; j<NY; ++j) { for (int k=0; k<NZ; ++k) {
-    //     out_grid[i][j][k] = 0;
-    // }}}
-
-
-
 // --------------- Get flash input coordinates -----------------------    
     lat0 = D2R*flash_pos[1];
     lon0 = D2R*flash_pos[2];
     rad0 = flash_pos[0];
-    // tmp_coords = {rad0, lat0, lon0};
-    // sphcar(flash_pos, tmp_coords);
+
     // Get flash position in SM coords:
     pol_to_cart_d_(&lat0, &lon0, &rad0, tmp_coords);
     mag_to_sm_d_(itime_in, tmp_coords, flash_pos_sm);
 
 
-
- 
     ostringstream tmp;
     tmp << ray_inp_dir << "/f_" << f1;
     vector <vector<double> > available_rays;
@@ -244,7 +204,9 @@ int main(int argc, char *argv[])
 
     // Allocate storage space for the power vectors:
     vector<Vector3d> interp_points[num_freqs][num_power_vects];
-    vector<double>   interp_data[num_freqs][num_power_vects];
+    vector<double>   energy_density[num_freqs][num_power_vects];
+    vector<double>   geometric_spreading[num_freqs][num_power_vects];
+    vector<double>   damping[num_freqs][num_power_vects];
 
 
 
@@ -393,24 +355,16 @@ int main(int argc, char *argv[])
 
                 // Get path length for energy density:
                 path_length = (cur_pos[k_ind] - prev_pos[k_ind]).norm()*R_E;
-                // cout << "prev_pos: " << prev_pos[k_ind].transpose() << " cur_pos: " << cur_pos[k_ind].transpose() << " ";
-                // cout << "path length: " << path_length/R_E << endl;
-                
+
                 
                 interp_points[k_ind][set_index].push_back(cur_pos[k_ind]);
-                //                            (    Watts /      m^2)   ( unitless ) (Sec) / Meters  ~ Joules/m^3
-                double cur_energy_density = (inp_pwr[k_ind]/frame_area)*damping_avg*Tpulse/path_length;
-                interp_data[k_ind][set_index].push_back(cur_energy_density);
+                //                            (    Joules /  m^2)      ( unitless ) / Meters  ~ Joules/m^3
+                double cur_energy_density = (inp_pwr[k_ind]/frame_area)*damping_avg/path_length;
+                energy_density[k_ind][set_index].push_back(cur_energy_density);
 
-                // double cur_pwr = (inp_pwr/frame_area)*damping_avg*freq_step_size;
-                // interp_data[k_ind][set_index].push_back(cur_pwr);
+                geometric_spreading[k_ind][set_index].push_back(initial_area/frame_area);
+                damping[k_ind][set_index].push_back(damping_avg);
 
-                // // Quantize and add to grid
-                // x_ind = nearest(xaxis, NX, centerpoint[0], false);
-                // y_ind = nearest(yaxis, NX, centerpoint[1], false);
-                // z_ind = nearest(zaxis, NX, centerpoint[2], false);
-
-                // out_grid[x_ind][y_ind][z_ind] += cur_pwr;
                 prev_pos[k_ind] = cur_pos[k_ind];
             }
 
@@ -420,47 +374,12 @@ int main(int argc, char *argv[])
 
         cout << "lengths of each  vector: ";
         for (int ii=0; ii<num_freqs; ii++) {
-            cout << interp_data[ii][set_index].size() << " ";
+            cout << energy_density[ii][set_index].size() << " ";
         }
         cout << endl;
 
         }
 
-
-        // ------------- Interpolate between calculated power vectors ----------------
-
-        // Find adjacent pairs:
-
-        // for (int cur = 0; cur < num_power_vects; cur++){
-
-        //     vector <double> dists_to;
-        //     for (int other = 0; other < num_power_vects; other++){
-        //         if (cur != other) {
-        //             double dd = (interp_points[0][cur][0] - interp_points[0][other][0]).norm();
-        //             dists_to.push_back(dd);
-        //             // cout << dd << endl;
-        //         }
-        //     }
-        // }
-
-
-
-        // Just write all these values to a file, so you can dick with them in Python.
-
-
-        // // Find the minimum length of the set:
-        // int min_num_times = num_times;
-
-        // for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
-        //     for (int i_ind = 0; i_ind < num_power_vects; i_ind++) {
-
-        //         // cout << k_ind << " " << i_ind << " size: " << interp_data[k_ind][i_ind].size() << endl;
-        //         if (interp_data[k_ind][i_ind].size() < min_num_times) {
-        //             min_num_times = interp_data[k_ind][i_ind].size();
-        //         }
-        //     }
-        // }
-        
         cout << "requested timesteps: " << num_times;
         // cout << " Actual timesteps: " << min_num_times << endl;
         FILE* outfile; 
@@ -470,32 +389,37 @@ int main(int argc, char *argv[])
         } else {
 
             fprintf(outfile, "%d\t%d\t",num_freqs, num_power_vects);
-            // fwrite(&num_freqs,sizeof(int),1,outfile);
 
             // Print lengths of each vector at the top of the file
             for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
                 for (int i_ind = 0; i_ind < num_power_vects; i_ind++) {
-                    fprintf(outfile, "%i ",interp_data[k_ind][i_ind].size());
+                    fprintf(outfile, "%i ",energy_density[k_ind][i_ind].size());
                 }
             }
 
             for (int k_ind = 0; k_ind < num_freqs; ++k_ind) {
                 for (int i_ind = 0; i_ind < num_power_vects; i_ind++) {
-                    for (int t_ind = 0; t_ind < interp_data[k_ind][i_ind].size(); ++t_ind) {
+                    for (int t_ind = 0; t_ind < energy_density[k_ind][i_ind].size(); ++t_ind) {
                         fprintf(outfile,"%g\t%g\t%g\t%g\t",
                             interp_points[k_ind][i_ind][t_ind][0],
                             interp_points[k_ind][i_ind][t_ind][1],
                             interp_points[k_ind][i_ind][t_ind][2],
-                            interp_data[k_ind][i_ind][t_ind]);
+                            energy_density[k_ind][i_ind][t_ind]);
+
+                        fprintf(outfile,"%g\t", geometric_spreading[k_ind][i_ind][t_ind]);
+                        fprintf(outfile,"%g\t", damping[k_ind][i_ind][t_ind]);
                     }
                 }
             }
         }
         fclose(outfile);
+}
 
 
 
 
+
+    // ----------------- Scraps: Alglib stuff, nonlinear solver stuff... ------------
 
 
 
@@ -661,4 +585,3 @@ int main(int argc, char *argv[])
     // }
     // fclose(outfile);
 
-}

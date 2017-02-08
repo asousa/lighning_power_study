@@ -17,17 +17,20 @@ from scipy.spatial import Delaunay
 xlims = [-5, 0]
 ylims = [-2.5,2.5]
 zlims = [-2.5,2.5]
-grid_step_size = 0.05
+grid_step_size = 0.02
+
+
+dt = 0.1 # seconds... whatever you ran the c-code with
 
 R_E = 6371e3
 
-flash_lat = 31
+flash_lat = 40
 
-clims = [-5, 0]
+clims = [-3, 5]
 method='linear'
 
-inp_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/testing/lat_%d'%flash_lat
-out_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/movie_testing/'
+inp_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/nightside/ngo_igrf/lat_%d'%flash_lat
+out_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/movie_testing3/'
 
 # --------------- Latex Plot Beautification --------------------------
 fig_width = 8.5 
@@ -59,7 +62,9 @@ for file_ind, fname in enumerate(avail_files):
 
     dlengths = np.array([int(x) for x in data_raw[2:(2 + nf*nv)]])
     nt = max(dlengths)
-    dgrid = np.zeros([nf, nv, max(dlengths), 4])
+    dgrid = np.zeros([nf, nv, max(dlengths), 6])
+    dgrid[:] = np.NAN
+
     startind = 2 + nf*nv
     stopind  = 0 
     for f_ind in range(nf):
@@ -67,9 +72,9 @@ for file_ind, fname in enumerate(avail_files):
             d_ind = f_ind*nv + v_ind
             dl = dlengths[d_ind]      
     #         print f_ind, v_ind, d_ind, dl
-            stopind = startind + 4*dl
+            stopind = startind + 6*dl
             tmp = data_raw[startind:stopind]
-            curdata = np.reshape(tmp, [dl,4])
+            curdata = np.reshape(tmp, [dl, 6])
             dgrid[f_ind, v_ind, 0:dl, :] = curdata
             startind=stopind
 
@@ -130,75 +135,97 @@ for t in range(tmax):
     # Loop over each file:
     for file in file_data:
         nf = file['nf']
+        nv = file['nv']
         dgrid = file['dgrid']
         adj_inds =  file['adj_inds']
         dlengths = file['dlengths']
 
-        for f_ind in range(nf):
-            data = np.zeros([nx, ny, nz])
-            hits = np.zeros([nx, ny, nz])
-            for adj_row in adj_inds:
+        if method=='nointerp':
 
-                # Check max length of each vector:
-                cur_t = min(dlengths[adj_row])
-                if t < (cur_t - 1):
-                    points = dgrid[f_ind,adj_row,t:t+2,0:3]
-                    vals = dgrid[f_ind,adj_row,t:t+2,3]
-                    vals_flat = vals.ravel()
-                    points_flat = np.vstack([points[:,:,0].ravel(), points[:,:,1].ravel(), points[:,:,2].ravel()]).T
-                    
-                    # Narrow down our search space to just a box around the current hull:
-                    minx = min(points_flat[:,0])
-                    maxx = max(points_flat[:,0])
-                    miny = min(points_flat[:,1])
-                    maxy = max(points_flat[:,1])
-                    minz = min(points_flat[:,2])
-                    maxz = max(points_flat[:,2])
+            # Just snap the input points to the grid.
 
-                    ix = np.where((xx >= minx) & (xx <= maxx))[0]
-                    iy = np.where((yy >= miny) & (yy <= maxy))[0]
-                    iz = np.where((zz >= minz) & (zz <= maxz))[0]
+            print max(dlengths)
+            if t+1 < (np.max(dlengths)):
+                points = dgrid[:,:,t:t+2,0:3]
+                vals   = dgrid[:,:,t:t+2,3].ravel()
+                # print points
 
-                    px, py, pz = np.meshgrid(ix, iy, iz, indexing='ij')  # in 3d, ij gives xyz, xy gives yxz. dumb.
+                pxg = np.digitize(points[:,:,:,0].ravel(), xx)
+                pyg = np.digitize(points[:,:,:,1].ravel(), yy)
+                pzg = np.digitize(points[:,:,:,2].ravel(), zz)
 
-                    newpoints = np.vstack([xx[px.ravel()], yy[py.ravel()], zz[pz.ravel()]]).T
+                data_total[pxg[~np.isnan(vals)], pyg[~np.isnan(vals)], pzg[~np.isnan(vals)]] += vals[~np.isnan(vals)]
+        else:
+            for f_ind in range(nf):
+                data = np.zeros([nx, ny, nz])
+                hits = np.zeros([nx, ny, nz])
+                for adj_row in adj_inds:
 
-                    if method=='linear':
-                        # If we don't specify a fill value, 'linear' mode returns NaN for anything outside
-                        # the convex hull of the current point cloud (which is ideal -- we don't want any
-                        # values calculated outside the (non-convex) hull.)
-                        tmp_data = interpolate.griddata(points_flat, vals_flat, newpoints, method='linear', rescale=True)
-                        tmp_data = tmp_data.reshape([len(ix), len(iy), len(iz)])
+                    # Check max length of each vector:
+                    cur_t = min(dlengths[adj_row])
+                    if t < (cur_t - 1):
+                        points = dgrid[f_ind,adj_row,t:t+2,0:3]
+                        vals = dgrid[f_ind,adj_row,t:t+2,3]
+                        vals_flat = vals.ravel()
+                        points_flat = np.vstack([points[:,:,0].ravel(), points[:,:,1].ravel(), points[:,:,2].ravel()]).T
+                        
+                        # Narrow down our search space to just a box around the current hull:
+                        minx = min(points_flat[:,0])
+                        maxx = max(points_flat[:,0])
+                        miny = min(points_flat[:,1])
+                        maxy = max(points_flat[:,1])
+                        minz = min(points_flat[:,2])
+                        maxz = max(points_flat[:,2])
 
-                        # tmp_data = np.unravel_index
-                        isnans = np.isnan(tmp_data)
-                        tmp_data[np.isnan(tmp_data)] = 0
-            #             print np.sum(isnans), np.sum(~isnans)
-                        data[px,py,pz] += tmp_data
-                        hits[px,py,pz] += ~isnans
-                    elif method=='mean':
-                        # fill each voxel with the mean value of all corners.
-                        newtri = Delaunay(points_flat)
-                        hit_mask = newtri.find_simplex(newpoints) >=0
+                        ix = np.where((xx >= minx) & (xx <= maxx))[0]
+                        iy = np.where((yy >= miny) & (yy <= maxy))[0]
+                        iz = np.where((zz >= minz) & (zz <= maxz))[0]
 
-                        hit_mask = hit_mask.reshape([len(ix), len(iy), len(iz)])
-                        hits[px,py,pz] += hit_mask
-                        data[px[hit_mask],py[hit_mask], pz[hit_mask]] += np.mean(vals_flat)
+                        px, py, pz = np.meshgrid(ix, iy, iz, indexing='ij')  # in 3d, ij gives xyz, xy gives yxz. dumb.
 
-                    # print np.max(hits), np.sum(hits > 1), len(hits)
-            # Average any bins which got more than one hit at this timestep:
-            # (this should just be the edges and corners)
-            data[hits!=0] /= hits[hits!=0]
+                        newpoints = np.vstack([xx[px.ravel()], yy[py.ravel()], zz[pz.ravel()]]).T
 
-            data_total += data   # add the result from this frequency step to the total
+                        if method=='linear':
+                            # If we don't specify a fill value, 'linear' mode returns NaN for anything outside
+                            # the convex hull of the current point cloud (which is ideal -- we don't want any
+                            # values calculated outside the (non-convex) hull.)
+                            tmp_data = interpolate.griddata(points_flat, vals_flat, newpoints, method='linear', rescale=True)
+                            tmp_data = tmp_data.reshape([len(ix), len(iy), len(iz)])
+
+                            # tmp_data = np.unravel_index
+                            isnans = np.isnan(tmp_data)
+                            tmp_data[np.isnan(tmp_data)] = 0
+                #             print np.sum(isnans), np.sum(~isnans)
+                            data[px,py,pz] += tmp_data
+                            hits[px,py,pz] += ~isnans
+                        elif method=='mean':
+                            # fill each voxel with the mean value of all corners.
+                            newtri = Delaunay(points_flat)
+                            hit_mask = newtri.find_simplex(newpoints) >=0
+
+                            hit_mask = hit_mask.reshape([len(ix), len(iy), len(iz)])
+                            hits[px,py,pz] += hit_mask
+                            data[px[hit_mask],py[hit_mask], pz[hit_mask]] += np.mean(vals_flat)
+
+
+                        # print np.max(hits), np.sum(hits > 1), len(hits)
+                # Average any bins which got more than one hit at this timestep:
+                # (this should just be the edges and corners)
+                # data[hits!=0] /= hits[hits!=0]
+
+                data_total += data   # add the result from this frequency step to the total
 
         # To confirm: Total up the energy at this frame.
     total_energy = sum(sum(sum(data_total)))*pow(R_E*grid_step_size,3)
     print "Total energy:", total_energy, "Joules"
 
     # Plot frame:
+    
+    fig, ax = plot_avg_power_2up(data_total*pow(R_E*grid_step_size,3), xlims, ylims, zlims, grid_step_size, clims=clims)
 
-    plot_avg_power_2up(data_total*pow(R_E*grid_step_size,3), xlims, ylims, zlims, grid_step_size, clims=clims)
+    fig.suptitle('T=%0.1f s E= %0.1f J'%(t*dt, total_energy))
+
+
     plt.savefig(os.path.join(out_dir,"frame_%d.png"%t),ldpi=300)
     plt.close('all')
 

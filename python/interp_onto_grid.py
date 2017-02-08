@@ -29,7 +29,7 @@ def interp_onto_grid(fname, xlims, ylims, zlims, step_size, method='linear'):
 
     dlengths = np.array([int(x) for x in data_raw[2:(2 + nf*nv)]])
     nt = max(dlengths)
-    dgrid = np.zeros([nf, nv, max(dlengths), 4])
+    dgrid = np.zeros([nf, nv, max(dlengths), 6])
     startind = 2 + nf*nv
     stopind  = 0 
     for f_ind in range(nf):
@@ -37,9 +37,9 @@ def interp_onto_grid(fname, xlims, ylims, zlims, step_size, method='linear'):
             d_ind = f_ind*nv + v_ind
             dl = dlengths[d_ind]      
     #         print f_ind, v_ind, d_ind, dl
-            stopind = startind + 4*dl
+            stopind = startind + 6*dl
             tmp = data_raw[startind:stopind]
-            curdata = np.reshape(tmp, [dl,4])
+            curdata = np.reshape(tmp, [dl, 6])
             dgrid[f_ind, v_ind, 0:dl, :] = curdata
             startind=stopind
 
@@ -211,6 +211,7 @@ def plot_avg_power_3up(data, xlims, ylims, zlims, step_size, clims=None):
     
     fig.tight_layout()
 
+    return fig, ax
 
 # Plot average power on each axis:
 def plot_avg_power_2up(data, xlims, ylims, zlims, step_size, clims=None):
@@ -291,7 +292,7 @@ def plot_avg_power_2up(data, xlims, ylims, zlims, step_size, clims=None):
 
 
 
-
+    return fig, ax
 
 
 def c2p3(din):
