@@ -143,6 +143,11 @@ class xflib(object):
 
         return [x for x in cx_out]
 
+    def rllgeo2rllmag(self, x_in, time_in):
+        ''' Geographic (r, lat, lon) to Geomagnetic (r, lat, lon) '''
+        xtmp = self.s2c(x_in)
+        xtmp = self.geo2mag(xtmp, time_in)
+        return self.c2s(xtmp)
 
     def rllgeo2sm(self, x_in, time_in):
         ''' geographic (radius, lat, lon) to Solar Magnetic (cartesian) '''

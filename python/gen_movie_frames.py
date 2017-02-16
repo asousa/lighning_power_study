@@ -29,8 +29,8 @@ flash_lat = 40
 clims = [-3, 5]
 method='linear'
 
-inp_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/nightside/ngo_igrf/lat_%d'%flash_lat
-out_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/movie_testing3/'
+inp_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/test_totalenergy/lat_%d'%flash_lat
+out_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/movie_testing6/'
 
 # --------------- Latex Plot Beautification --------------------------
 fig_width = 8.5 
@@ -195,9 +195,12 @@ for t in range(tmax):
                             # tmp_data = np.unravel_index
                             isnans = np.isnan(tmp_data)
                             tmp_data[np.isnan(tmp_data)] = 0
+
+                            total_cells = np.sum(~isnans)
+                            if total_cells > 0:
                 #             print np.sum(isnans), np.sum(~isnans)
-                            data[px,py,pz] += tmp_data
-                            hits[px,py,pz] += ~isnans
+                                data[px,py,pz] += tmp_data/total_cells/pow(R_E*grid_step_size, 3)  # Energy per volume
+                                hits[px,py,pz] += ~isnans
                         elif method=='mean':
                             # fill each voxel with the mean value of all corners.
                             newtri = Delaunay(points_flat)
@@ -211,7 +214,7 @@ for t in range(tmax):
                         # print np.max(hits), np.sum(hits > 1), len(hits)
                 # Average any bins which got more than one hit at this timestep:
                 # (this should just be the edges and corners)
-                # data[hits!=0] /= hits[hits!=0]
+                data[hits!=0] /= hits[hits!=0]
 
                 data_total += data   # add the result from this frequency step to the total
 

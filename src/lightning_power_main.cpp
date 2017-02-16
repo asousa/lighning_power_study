@@ -208,6 +208,12 @@ int main(int argc, char *argv[])
     vector<double>   geometric_spreading[num_freqs][num_power_vects];
     vector<double>   damping[num_freqs][num_power_vects];
 
+// Loop back through the set of adjacent rays and calculate total input power: ----------
+
+    // cout << "Integrating total input energy above iono:" << endl;
+    // double total_integrated_power = total_input_power(flash_pos_sm, flash_I0, 
+    //                                     15, 60, 70, 80, 200*2*PI, 30000*2*PI, itime_in);
+    // cout << "total input energy: " << total_integrated_power << endl;
 
 
     // -------------- Iterate through adjacent ray sets: -----------------
@@ -295,7 +301,7 @@ int main(int argc, char *argv[])
             double whi = wmin + (nf + 1)*dw/num_freqs;
             inp_pwr[nf] = total_input_power(flash_pos_sm, flash_I0, 
                                         latmin, latmax, lonmin, lonmax, wlo, whi, itime_in);
-            cout << "input power between " << wlo/2./PI << " and " << whi/2./PI << " : " << inp_pwr[nf] << " Watts\n";
+            cout << "input power between " << wlo/2./PI << " and " << whi/2./PI << " : " << inp_pwr[nf] << " Joules\n";
         }
 
         // --------------------- Interpolate + sum over output grid ----------------
@@ -304,23 +310,11 @@ int main(int argc, char *argv[])
         time(&run_tstart);
 
 
-        // Interpolate the first frames:
-        for (int zz=0; zz<8; zz++) { 
-            interp_rayF(&cur_rays[zz], &(prev_frames[zz]), 0); 
-            corners[zz] = prev_frames[zz].pos;
-            for (int k_ind=0; k_ind<num_freqs; k_ind++) {
-                prev_pos[k_ind] += prev_frames[zz].pos;
-            }
-        }
-    
-        for (int k_ind=0; k_ind<num_freqs; k_ind++) {prev_pos[k_ind] /= 8.0; }
-
-
         // Initial area (only needed if you're calculating relative spreading instead of absolute)
         initial_area = polygon_frame_area(corners);
 
         // Step forward in time:
-        for (double tt=time_step; tt < tmax; tt+=time_step) {
+        for (double tt=0; tt < tmax; tt+=time_step) {
             // interpolate current frames:
             for (int zz=0; zz<8; zz++) { interp_rayF(&cur_rays[zz], &(cur_frames[zz]), tt);}
 
@@ -334,42 +328,49 @@ int main(int argc, char *argv[])
                 // interpolate corners over frequency axis:
                 for (int i=0; i<4; ++i) {
                     corners[i]   = cur_frames[i].pos*kk + cur_frames[i+4].pos*(1-kk);
-                    corners[i+4] = prev_frames[i].pos*kk + prev_frames[i+4].pos*(1-kk);
+                    // corners[i+4] = prev_frames[i].pos*kk + prev_frames[i+4].pos*(1-kk);
                     damping_at_corners[i] = cur_frames[i].damping*kk + cur_frames[i+4].damping*(1-kk);
-                    damping_at_corners[i+4] = prev_frames[i].damping*kk + prev_frames[i+4].damping*(1-kk);
+                    // damping_at_corners[i+4] = prev_frames[i].damping*kk + prev_frames[i+4].damping*(1-kk);
                 }
                 
-                // Just grabbing the value at the center point: Average from all corners.
+                // Average all four corners to get values at the center of the plane:
                 cur_pos[k_ind][0] = 0; cur_pos[k_ind][1] = 0; cur_pos[k_ind][2] = 0;
                 damping_avg = 0;
-                for (int i=0; i<8; ++i) {
+                for (int i=0; i<4; ++i) {
                     cur_pos[k_ind] += corners[i];
                     damping_avg += damping_at_corners[i];
                 }
-                cur_pos[k_ind] /=8.0;
-                damping_avg /=8.0;
+                cur_pos[k_ind] /=4.0;
+                damping_avg /=4.0;
 
 
                 // Get frame area for geometric factor:
                 frame_area = polygon_frame_area(corners);
 
                 // Get path length for energy density:
-                path_length = (cur_pos[k_ind] - prev_pos[k_ind]).norm()*R_E;
-
+                if (tt==0) { 
+                    path_length = 1; 
+                } else {
+                    path_length = (cur_pos[k_ind] - prev_pos[k_ind]).norm()*R_E;
+                }
                 
                 interp_points[k_ind][set_index].push_back(cur_pos[k_ind]);
+
                 //                            (    Joules /  m^2)      ( unitless ) / Meters  ~ Joules/m^3
-                double cur_energy_density = (inp_pwr[k_ind]/frame_area)*damping_avg/path_length;
+                // double cur_energy_density = (inp_pwr[k_ind]/frame_area)*damping_avg/path_length;
+                double cur_energy_density = (inp_pwr[k_ind])*damping_avg;   // <- total energy:  (so you can divide by the total volume in Python)
+
                 energy_density[k_ind][set_index].push_back(cur_energy_density);
 
                 geometric_spreading[k_ind][set_index].push_back(initial_area/frame_area);
+                
                 damping[k_ind][set_index].push_back(damping_avg);
 
                 prev_pos[k_ind] = cur_pos[k_ind];
             }
 
-            // Step forward one frame:
-            for (int zz=0; zz<8; zz++) { prev_frames[zz] = cur_frames[zz]; }        
+            // // Step forward one frame:
+            // for (int zz=0; zz<8; zz++) { prev_frames[zz] = cur_frames[zz]; }        
         }
 
         cout << "lengths of each  vector: ";

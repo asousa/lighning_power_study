@@ -13,8 +13,6 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 def interp_onto_grid(fname, xlims, ylims, zlims, step_size, method='linear'):
 
     
-
-
     R_E = 6371e3
     H_IONO = 1000e3
     
@@ -114,9 +112,12 @@ def interp_onto_grid(fname, xlims, ylims, zlims, step_size, method='linear'):
                         # tmp_data = np.unravel_index
                         isnans = np.isnan(tmp_data)
                         tmp_data[np.isnan(tmp_data)] = 0
+
+                        total_cells = np.sum(~isnans)
+                        if total_cells > 0:
             #             print np.sum(isnans), np.sum(~isnans)
-                        data[px,py,pz] += tmp_data
-                        hits[px,py,pz] += ~isnans
+                            data[px,py,pz] += tmp_data/total_cells/pow(R_E*step_size, 3)  # Energy per volume
+                            hits[px,py,pz] += ~isnans
                     elif method=='mean':
                         # fill each voxel with the mean value of all corners.
                         newtri = Delaunay(points_flat)
@@ -226,15 +227,13 @@ def plot_avg_power_2up(data, xlims, ylims, zlims, step_size, clims=None):
     ny = len(yy)
     nz = len(zz)
 
+    
     # xz_vals = np.log10((np.sum(data, axis=1).T))
     # xy_vals = np.log10((np.sum(data, axis=2).T))
-    # yz_vals = np.log10((np.sum(data, axis=0).T))
 
-    xz_vals = np.log10((np.sum(data, axis=1).T))
-    xy_vals = np.log10((np.sum(data, axis=2).T))
-    # yz_vals = np.log10((np.sum(data, axis=0).T))
+    xz_vals = np.log10((data[:,len(yy)/2, :]).T)
+    xy_vals = np.log10((data[:,:, len(zz)/2]).T)
     
-    # print "xz min, max: ", np.min(xz_sum), np.max(xz_sum)
  
     maxlog = np.ceil(np.max([xz_vals, xy_vals]))
 

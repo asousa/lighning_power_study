@@ -85,7 +85,7 @@ double total_input_power(double flash_pos_sm[3], double i0,
                 pwr = input_power_scaling(flash_pos_sm, x_sm, lat, w, i0, mlt);
 
                 double dist_lat = (R_E + H_IONO)*dlat*D2R;
-                double dist_lon = (R_E + H_IONO)*dlon*sin(D2R*lat)*D2R;
+                double dist_lon = (R_E + H_IONO)*dlon*cos(D2R*lat)*D2R;
                                 // Latitude distance      longitude distance       freq dist
                 // cout << "dist_lat: " << dist_lat << ", dist_lon: " << dist_lon << "\n";
                 tot_pwr += pwr * dist_lat * dist_lon * dw;
