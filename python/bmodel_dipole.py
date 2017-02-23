@@ -1,4 +1,6 @@
 import numpy as np
+import igrf12
+from sciencedates import datetime2yeardec
 
 def bmodel_dipole(x_in):
     Bo = (3.12e-5)
@@ -22,3 +24,23 @@ def bmodel_dipole(x_in):
 
     return B_out
 
+
+def bmodel_igrf(x_in, itime):
+    print "herpy derpy"
+    isv=0  # Field = 0, secular variaton = 1
+    itype = 1 # 1=geodetic earth, 2 = geocentric earth
+
+    yeardec = datetime2yeardec(dtime)
+    colat,elon = latlon2colat(glat,glon)
+
+    x = np.empty(colat.size);  y = np.empty_like(x); z = np.empty_like(x); f=np.empty_like(x)
+    for i,(clt,eln) in enumerate(nditer((colat,elon))):
+        x[i],y[i],z[i],f[i] = igrf12.igrf12syn(isv, yeardec, itype, alt, clt, eln)
+
+    return x.reshape(colat.shape), y.reshape(colat.shape), z.reshape(colat.shape),f.reshape(colat.shape), yeardec
+
+def latlon2colat(glat,glon):
+    #atleast_1d for iteration later
+    colat = 90-np.atleast_1d(glat)
+    elon = (360 + np.atleast_1d(glon)) % 360
+    return colat,elon

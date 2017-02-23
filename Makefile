@@ -32,19 +32,17 @@ sources = \
 	nonlinear_optimization.cpp \
 	lightning_power_methods.cpp
 
-
-	# interpolation.cpp \
-	# ap.cpp \
-	# alglibinternal.cpp \
-	# alglibmisc.cpp \
-	# linalg.cpp \
-	# solvers.cpp \
-	# optimization.cpp \
-	# specialfunctions.cpp \
-	# integration.cpp
+flatten_sources = \
+	wipp_fileutils.cpp \
+	math_utils.cpp \
+	coord_transforms.cpp \
+	lightning_power_methods.cpp \
+	flatten_longitude_variation.cpp
 
 
-_OBJ = ${sources:.cpp=.o}	
+_OBJ = ${sources:.cpp=.o}
+_FOBJ = ${flatten_sources:.cpp=.o}	
+FOBJ = $(patsubst %,$(ODIR)/%,$(_FOBJ))
 
 SOURCES_WITH_PATH = $(patsubst %,$(SRC_DIR)/%,$(sources))
 
@@ -60,6 +58,9 @@ $(ODIR)/%.o: $(SRC_DIR)/%.cpp $(DEPS)
 calc_power: $(OBJ) $(LDIR)/libxformd.a
 	$(CC) $(CFLAGS) $(OBJ) -L $(LDIR) $(LIBS) -o $(BDIR)/$@
 
+flatten_longitude_variation: $(FOBJ) $(LDIR)/libxformd.a
+	$(CC) $(CFLAGS) $(FOBJ) -L $(LDIR) $(LIBS) -o $(BDIR)/$@
+	
 # Legacy coordinate transforms, used in raytracer
 $(LDIR)/libxformd.a:
 	$(MAKE) -C $(XFORM)

@@ -312,7 +312,7 @@ void write_rayfile(string fileName, map <int, rayF> raylist) {
                 // Re-print everything in the same format as read in:
                 // (Originally specified in the fortran raytracer)
                 fprintf(file, "%d  %g  %.15e  ", iter->first, ray.stopcond, ray.time[x]);
-                fprintf(file, "%.15e  %.15e  %.15e  ", ray.pos[x][0], ray.pos[x][1], ray.pos[x][2]);
+                fprintf(file, "%.15e  %.15e  %.15e  ", ray.pos[x][0]*R_E, ray.pos[x][1]*R_E, ray.pos[x][2]*R_E);
                 fprintf(file, "%.15e  %.15e  %.15e  ",ray.vprel[x][0], ray.vprel[x][1], ray.vprel[x][2]);
                 fprintf(file, "%.15e  %.15e  %.15e  ",ray.vgrel[x][0], ray.vgrel[x][1], ray.vgrel[x][2]);
                 fprintf(file, "%.15e  %.15e  %.15e  ",ray.n[x][0],     ray.n[x][1],     ray.n[x][2]);
@@ -331,11 +331,11 @@ void write_rayfile(string fileName, map <int, rayF> raylist) {
                     fprintf(file, "%.15e  ",ray.nus[x][i]);
                 }
 
-                // If we have damping calculations, let's append them too:
-                if (ray.damping.size() > 0) {
+                // // If we have damping calculations, let's append them too:
+                // if (ray.damping.size() > 0) {
 
-                    fprintf(file, "%.15e  ",ray.damping[x]);
-                }
+                //     fprintf(file, "%.15e  ",ray.damping[x]);
+                // }
 
                 fprintf(file, "\n");
 

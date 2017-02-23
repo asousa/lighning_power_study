@@ -24,6 +24,7 @@
 #include <consts.h>
 
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <dirent.h>
 #include <ftw.h>
 
@@ -184,6 +185,8 @@ void print_array(double* arr, double len);
 
 map<int, rayF> read_rayfile(string fileName);
 map <int, rayF> read_dampfile(string fileName);
+void write_rayfile(string fileName, map <int, rayF> raylist);
+
 
 // Science!
 double input_power_scaling(double* flash_loc, double* ray_loc, double mag_lat, double w, double i0);

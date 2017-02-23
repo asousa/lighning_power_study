@@ -83,13 +83,16 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/ngo_dipole/',
                     tmax=10,
                     dt=0.1,
                     I0=-10000,
-                    f1=200, f2=230,
+                    f_low=200, f_hi=30000,
+                    min_fstep = 5000.0,
                     itime = datetime.datetime(2010,1,1,0,0,0),
                     xlims = [-5, 0],
                     ylims = [-2.5, 2.5],
                     zlims = [-2.5, 2.5],
                     step_size = 0.02,
                     frame_directory=None):
+
+    n_freqs = 1  # Move this somewhere else, and make it a function of the guide frequencies
 
     # Constants
     Hz2Rad = 2.*np.pi
@@ -124,6 +127,12 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/ngo_dipole/',
     latln_pairs = zip(latgrid.ravel(), longrid.ravel())
 
     pairs_in_range = []
+
+    # Adjacent frequencies to iterate over
+    freqs =   [f for f in freqs if f >=f_low and f <= f_hi]
+    freq_pairs = zip(freqs[0:-1],freqs[1:])
+
+
 
 #-------------- Select points within range -----------------------------------------------------------
     # Prune out some points the further out we go:
@@ -193,7 +202,7 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/ngo_dipole/',
 
     # print min(starting_coords[:,0]), max(starting_coords[:,0])
 
-    grid_spacing = 0.25 # deg
+    grid_spacing = 0.25 # deg (Just for the power calculation)
 
     latrange = [min(starting_coords[:,0]), max(starting_coords[:,0])]
     lonrange = [min(starting_coords[:,1]), max(starting_coords[:,1])]
@@ -208,35 +217,47 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/ngo_dipole/',
     # print np.shape(mask)
     # print np.shape(clats)
 
-    pwr_grid = np.zeros([len(gridlons), len(gridlats)])
 
     flash_pos_mag = [1, flash_lat, flash_lon]
     flash_pos_sm = xf.rllmag2sm(flash_pos_mag, itime)
 
     logging.info("Calculating input power at each simplex")
-    # Calculate power within enclosed triangles:
-    for lat_ind, lat in enumerate(gridlats):
-        for lon_ind, lon in enumerate(gridlons):
-            if mask[lon_ind, lat_ind] >=0:
-                    clat = lat + grid_spacing/2.
-                    clon = lon + grid_spacing/2.
 
-                    w = np.abs(f1 + f2)*Hz2Rad/2.;
-                    dw = np.abs(f1 - f2)*Hz2Rad
-                    mlt = MLT(itime, clon, xf);
-                    tmp_coords = [1 + H_IONO/R_E, clat, clon];
-                    x_sm = xf.rllmag2sm(tmp_coords, itime);
-                    pwr = input_power_scaling(flash_pos_sm, x_sm, lat, w, I0, mlt, xf);
-                    dist_lat = (R_E + H_IONO)*grid_spacing*D2R;
-                    dist_lon = (R_E + H_IONO)*grid_spacing*np.cos(D2R*clat)*D2R;
-                    pwr_grid[lon_ind, lat_ind] = pwr*dw*dist_lat*dist_lon
-                    
+    inp_pwrs = dict()
 
-    tri_inds = np.unique(mask[mask >= 0])
-    inp_pwrs = np.zeros(len(tri_inds))
+    for f1, f2 in freq_pairs:
+        n_freqs = np.ceil(np.abs(f2 - f1)/min_fstep)
+        f_weights = (np.arange(0,1,1.0/n_freqs) + (1.0/(2.*n_freqs)))
+        # logging.info("f1: %g, f2: %g"%(f1,f2))
 
-    for val in tri_inds:
-        inp_pwrs[val] = np.sum(pwr_grid[mask==val])
+        for f_weight in f_weights:
+            f_center = f_weight*f1 + (1.0-f_weight)*f2
+            logging.info("freq: %g"%f_center)
+            pwr_grid = np.zeros([len(gridlons), len(gridlats)])
+            # Calculate power within enclosed triangles:
+            for lat_ind, lat in enumerate(gridlats):
+                for lon_ind, lon in enumerate(gridlons):
+                    if mask[lon_ind, lat_ind] >=0:
+                            clat = lat + grid_spacing/2.
+                            clon = lon + grid_spacing/2.
+                            w = f_center*Hz2Rad
+                            # w = np.abs(f1 + f2)*Hz2Rad/2.;
+                            dw = np.abs(f1 - f2)*Hz2Rad/n_freqs
+                            mlt = MLT(itime, clon, xf);
+                            tmp_coords = [1 + H_IONO/R_E, clat, clon];
+                            x_sm = xf.rllmag2sm(tmp_coords, itime);
+                            pwr = input_power_scaling(flash_pos_sm, x_sm, lat, w, I0, mlt, xf);
+                            dist_lat = (R_E + H_IONO)*grid_spacing*D2R;
+                            dist_lon = (R_E + H_IONO)*grid_spacing*np.cos(D2R*clat)*D2R;
+                            pwr_grid[lon_ind, lat_ind] = pwr*dw*dist_lat*dist_lon
+                                    
+
+            tri_inds = np.unique(mask[mask >= 0])
+            # inp_pwrs = np.zeros(len(tri_inds))
+
+            for val in tri_inds:
+                inp_pwrs[(f_center, val)] = np.sum(pwr_grid[mask==val])
+                # inp_pwrs[val] = np.sum(pwr_grid[mask==val])
                         
     # Final outputs of this section:
     # inp_pwrs ~ total energy (joules) within each triangle
@@ -277,106 +298,104 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/ngo_dipole/',
 
 
     # Interpolate over frequencies:
-    n_freqs = 1
     # freq_step = (f2 - f1)/n_freqs
     
     interp_pos = dict()
     interp_damp= dict()
 
-#    f_weights = np.linspace(0,1, n_freqs)
 
     # for f_weight in np.linspace(0,1, n_freqs):
     # f_weight is the center of each of n_freqs subsections between 0 and 1
-    for f_weight in (np.arange(0,1,1.0/n_freqs) + (1.0/(2.*n_freqs))):
-        logging.info("Frequency weight: %g"%f_weight)
-        tmax = 0
-        # Interpolate in frequency between guide rays
-        for lat, lon in pairs_in_range:
-            k1 = (f1, lat, lon)
-            k2 = (f2, lat, lon)
-            k3 = (lat, lon)
-    
-            tmax_local = min(ray_data[k1]['nt'], ray_data[k2]['nt'])
-            newpos = f_weight*ray_data[k1]['pos'][:,0:tmax_local]  + (1.0 - f_weight)*ray_data[k2]['pos'][:,0:tmax_local]
-            newdamp= f_weight*ray_data[k1]['damp'][0:tmax_local] + (1.0 - f_weight)*ray_data[k2]['damp'][0:tmax_local]
-            interp_pos[k3] = newpos
-            interp_damp[k3]=newdamp
+    for f1, f2 in freq_pairs:
+        n_freqs = np.ceil(np.abs(f2 - f1)/min_fstep)
+        f_weights = (np.arange(0,1,1.0/n_freqs) + (1.0/(2.*n_freqs)))
+        for f_weight in f_weights:
+            logging.info("Frequency weight: %g"%f_weight)
+            tmax = 0
+            # Interpolate in frequency between guide rays
+            for lat, lon in pairs_in_range:
+                k1 = (f1, lat, lon)     # Lower guide ray
+                k2 = (f2, lat, lon)     # Upper guide ray
+                f_cur = f_weight*f1 + (1.0-f_weight)*f2
+                k3 = (f_cur, lat, lon)  # Interpolated ray
+                
+                tmax_local = min(ray_data[k1]['nt'], ray_data[k2]['nt'])
+                newpos = f_weight*ray_data[k1]['pos'][:,0:tmax_local]  + (1.0 - f_weight)*ray_data[k2]['pos'][:,0:tmax_local]
+                newdamp= f_weight*ray_data[k1]['damp'][0:tmax_local] + (1.0 - f_weight)*ray_data[k2]['damp'][0:tmax_local]
+                interp_pos[k3] = newpos
+                interp_damp[k3]=newdamp
 
-    #     Step through times:
-        for t_ind in range(len(t)-1):
-            logging.info("t= %g sec"%(t_ind*dt))
-            data_cur = np.zeros([nx, ny, nz])
-    #         hits = np.zeros([nx, ny, nz])
-            # Loop over adjacent sets:
-            for ind, adj_row in enumerate(adj_inds):
-                k0 = pairs_in_range[adj_row[0]]
-                k1 = pairs_in_range[adj_row[1]]
-                k2 = pairs_in_range[adj_row[2]]
+#     Step through times:
+    for t_ind in range(len(t)-1):
+        logging.info("t= %g sec"%(t_ind*dt)) 
+        data_cur = np.zeros([nx, ny, nz])
+        for f1, f2 in freq_pairs:
+            n_freqs = np.ceil(np.abs(f2 - f1)/min_fstep)
+            f_weights = (np.arange(0,1,1.0/n_freqs) + (1.0/(2.*n_freqs)))
 
-                tmax_local = min(len(interp_damp[k0]),len(interp_damp[k1]),len(interp_damp[k2]))
-                if t_ind < tmax_local - 1:
-                    points = np.hstack([interp_pos[k0][:,t_ind:t_ind+2], 
-                                        interp_pos[k1][:,t_ind:t_ind+2], 
-                                        interp_pos[k2][:,t_ind:t_ind+2]])
-                    damps  = np.hstack([interp_damp[k0][t_ind:t_ind+2], 
-                                        interp_damp[k1][t_ind:t_ind+2], 
-                                        interp_damp[k2][t_ind:t_ind+2]])
-                    pwr = inp_pwrs[ind]/n_freqs
+            for f_weight in f_weights:
+                f_center = f_weight*f1 + (1.0 - f_weight)*f2
+                logging.info("Frequency: %g"%f_center)
 
-                    minx = min(points[0,:])
-                    maxx = max(points[0,:])
-                    miny = min(points[1,:])
-                    maxy = max(points[1,:])
-                    minz = min(points[2,:])
-                    maxz = max(points[2,:])
+                # Loop over adjacent sets:
+                for ind, adj_row in enumerate(adj_inds):
+                    k0 = (f_center, pairs_in_range[adj_row[0]][0], pairs_in_range[adj_row[0]][1])
+                    k1 = (f_center, pairs_in_range[adj_row[1]][0], pairs_in_range[adj_row[1]][1])
+                    k2 = (f_center, pairs_in_range[adj_row[2]][0], pairs_in_range[adj_row[2]][1])
 
-                    ix = np.where((xx >= minx) & (xx <= maxx))[0]
-                    iy = np.where((yy >= miny) & (yy <= maxy))[0]
-                    iz = np.where((zz >= minz) & (zz <= maxz))[0]
+                    tmax_local = min(len(interp_damp[k0]),len(interp_damp[k1]),len(interp_damp[k2]))
+                    if t_ind < tmax_local - 1:
+                        points = np.hstack([interp_pos[k0][:,t_ind:t_ind+2], 
+                                            interp_pos[k1][:,t_ind:t_ind+2], 
+                                            interp_pos[k2][:,t_ind:t_ind+2]])
+                        damps  = np.hstack([interp_damp[k0][t_ind:t_ind+2], 
+                                            interp_damp[k1][t_ind:t_ind+2], 
+                                            interp_damp[k2][t_ind:t_ind+2]])
 
-                    px, py, pz = np.meshgrid(ix, iy, iz, indexing='ij')  # in 3d, ij gives xyz, xy gives yxz. dumb.
-                    newpoints = np.vstack([xx[px.ravel()], yy[py.ravel()], zz[pz.ravel()]]).T
+                        pwr = inp_pwrs[(f_center, ind)]
 
-        #             # Full interpolation method:
-        #             tmp_data = interpolate.griddata(points.T, damps, newpoints, method='linear', rescale=False)
-        #             tmp_data = tmp_data.reshape([len(ix), len(iy), len(iz)])
-        #             isnans = np.isnan(tmp_data)
-        #             tmp_data[np.isnan(tmp_data)] = 0
-        #             total_cells = np.sum(~isnans)
-        #             voxel_vol = voxel_volume(points) # Volume in R_e
-        # #             print "total_cells: ", total_cells*pow(step_size, 3), "vol: ", voxel_vol
-        #             if total_cells > 0:
-        #                 data_cur[px,py,pz] += tmp_data*pwr/voxel_vol/pow(R_E,3) #*pwr/total_cells/pow(R_E*step_size,3)
-        #                 hits[px,py,pz] += ~isnans
+                        minx = min(points[0,:])
+                        maxx = max(points[0,:])
+                        miny = min(points[1,:])
+                        maxy = max(points[1,:])
+                        minz = min(points[2,:])
+                        maxz = max(points[2,:])
 
+                        ix = np.where((xx >= minx) & (xx <= maxx))[0]
+                        iy = np.where((yy >= miny) & (yy <= maxy))[0]
+                        iz = np.where((zz >= minz) & (zz <= maxz))[0]
 
-                    # Average the damping and just fill in the voxel:
-                    damping_avg = np.mean(damps)
-                    tri = Delaunay(points.T)
-                    mask = (tri.find_simplex(newpoints) >= 0)*1.0
-        #             print mask
-                    mask = mask.reshape([len(ix), len(iy), len(iz)])
-                    total_cells = np.sum(mask)
-                    if (total_cells > 0):
-        #                 print np.sum(mask)/(1.0*len(ix)*len(iy)*len(iz))   
-        #                voxel_vol = voxel_volume(points) # Volume in R_e           
-        #                 data_cur[px,py,pz] += damping_avg*mask*pwr/voxel_vol/pow(R_E,3)  # better volume estimate   
-                        data_cur[px,py,pz] += damping_avg*mask*pwr/total_cells/pow(R_E*step_size,3)  # assures constant energy
+                        px, py, pz = np.meshgrid(ix, iy, iz, indexing='ij')  # in 3d, ij gives xyz, xy gives yxz. dumb.
+                        newpoints = np.vstack([xx[px.ravel()], yy[py.ravel()], zz[pz.ravel()]]).T
 
-                # Average any bins which got more than one hit at this timestep:
-                # (this should just be the edges and corners)
-        #         data_cur[hits!=0] /= hits[hits!=0]
+                        # Average the damping and just fill in the voxel:
+                        damping_avg = np.mean(damps)
+                        tri = Delaunay(points.T)
+                        mask = (tri.find_simplex(newpoints) >= 0)*1.0
+                        mask = mask.reshape([len(ix), len(iy), len(iz)])
+                        total_cells = np.sum(mask)
+                        if (total_cells > 0):
+            #                voxel_vol = voxel_volume(points) # Volume in R_e           
+            #                 data_cur[px,py,pz] += damping_avg*mask*pwr/voxel_vol/pow(R_E,3)  # better volume estimate   
+                            data_cur[px,py,pz] += damping_avg*mask*pwr/total_cells/pow(R_E*step_size,3)  # assures constant energy
 
-            # Plot individual timesteps (for movies)
-            if frame_directory is not None:
-                fig, ax = plot_avg_pwr(data_cur, xlims,ylims,zlims,step_size)
-                fig.savefig(os.path.join(frame_directory,'frame%d.png'%t_ind),ldpi=300)
-                plt.close('all')
+                    # Average any bins which got more than one hit at this timestep:
+                    # (this should just be the edges and corners)
+            #         data_cur[hits!=0] /= hits[hits!=0]
+
+        # Plot individual timesteps (for movies)
+        if frame_directory is not None:
+            fig, ax = plot_avg_pwr(data_cur, xlims,ylims,zlims,step_size)
+            total_energy = sum(sum(sum(data_cur)))*pow(R_E*step_size,3)
+            fig.suptitle('T=%0.f s E= %0.1f J'%(t_ind*dt, total_energy))
+            fig.savefig(os.path.join(frame_directory,'frame%d.png'%t_ind),ldpi=300)
+            plt.close('all')
 
 
-            # logging.info("t ",t_ind, "total energy ", np.sum((data_cur))*pow(R_E*step_size,3), "multi hits: ", np.sum(hits > 1))
-            data_total += data_cur
+        # logging.info("t ",t_ind, "total energy ", np.sum((data_cur))*pow(R_E*step_size,3), "multi hits: ", np.sum(hits > 1))
+        data_total += data_cur
 
+        logging.info("energy: %g"%(np.sum((data_cur))*pow(R_E*step_size,3)))
     logging.info("finished with interpolation")
     return data_total
 
@@ -438,15 +457,6 @@ def plot_avg_pwr(data, xlims, ylims, zlims, step_size):
     p1 = ax[1].pcolorfast(xx, zz, xz_sum, vmin=clims[0], vmax=clims[1])
     p2 = ax[2].pcolorfast(yy, zz, yz_sum, vmin=clims[0], vmax=clims[1], zorder=101)
     p3 = ax[2].pcolorfast(yy, zz, flatblack, vmin=clims[0], vmax=clims[1], zorder=98)
-
-#     divider = make_axes_locatable(ax[2])
-#     cax = divider.append_axes("right",size="4%",pad=0.15)
-#     cb = plt.colorbar(p2, cax=cax)
-#     cb.set_label('avg wave power density')
-#     cticks = np.arange(clims[0],clims[1] + 1)
-#     cb.set_ticks(cticks)
-#     cticklabels = ['$10^{%d}$'%k for k in cticks]
-#     cb.set_ticklabels(cticklabels)
     
     ax[0].set_aspect('equal')
     ax[1].set_aspect('equal')
@@ -488,7 +498,14 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
                         format='[%(levelname)s] %(message)s')  
 
-    datagrid = interp_ray_power(frame_directory='/shared/users/asousa/WIPP/lightning_power_study/outputs/movie_testing7/')
+    datagrid = interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/ngo_dipole',
+                                tmax = 15,
+                                flash_lat=45,
+                                flash_lon=77,
+                                dt=0.05,
+                                frame_directory='/shared/users/asousa/WIPP/lightning_power_study/outputs/movie_testing7/')
+    # datagrid = interp_ray_power()
+
 
     fig, ax = plot_avg_pwr(datagrid, 
                 xlims=[-5,0],
@@ -497,4 +514,4 @@ if __name__ == "__main__":
                 step_size=0.02)
 
     fig.savefig("test_figure.png",ldpi=300)
-            
+    
