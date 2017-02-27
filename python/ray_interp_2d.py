@@ -91,7 +91,7 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
                     zlims = [-2.5, 2.5],
                     step_size = 0.02,
                     clims=[1e-19, 1e-14],
-                    n_freqs=5,
+                    n_sub_freqs=1,
                     frame_directory=None):
 
     # Constants
@@ -221,25 +221,26 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
     for f1, f2 in freq_pairs:
         print f1, f2
         # n_freqs = np.ceil(np.abs(f2 - f1)/min_fstep)
-        f_weights = (np.arange(0,1,1.0/n_freqs) + (1.0/(2.*n_freqs)))
+        # f_weights = (np.arange(0,1,1.0/n_sub_freqs) + (1.0/(2.*n_sub_freqs)))
         
-        for f_weight in f_weights:
-            f_center = f_weight*f1 + (1.0-f_weight)*f2
-            for ind, (lat1, lat2) in enumerate(lat_pairs):
-    #             print lat1, lat2
-                clat = (lat1 + lat2)/2.
-                w1 = Hz2Rad*f1
-                w2 = Hz2Rad*f2
-                w   = Hz2Rad*(f1 + f2)/2.
-                dw = np.abs(f1 - f2)*Hz2Rad/n_freqs
-                key = (f_center, clat)
-                ranges = [[lat1, lat2], lon_pairs[0]]
-                # Integrate power in latitude and longitude
-                integ = nquad(integrand, ranges, args=[w, itime, I0], opts=opts, full_output=False)
-                pwr = integ[0]
-                # Integrate in frequency (just doing this for efficiency,
-                # can also do it in the nquad call)
-                inp_pwrs[key] = pwr*dw
+        # for f_weight in f_weights:
+        # f_center = f_weight*f1 + (1.0-f_weight)*f2
+        f_center = (f1 + f2)/2.
+        for ind, (lat1, lat2) in enumerate(lat_pairs):
+#             print lat1, lat2
+            clat = (lat1 + lat2)/2.
+            w1 = Hz2Rad*f1
+            w2 = Hz2Rad*f2
+            w   = Hz2Rad*(f1 + f2)/2.
+            dw = np.abs(f1 - f2)*Hz2Rad
+            key = (f_center, clat)
+            ranges = [[lat1, lat2], lon_pairs[0]]
+            # Integrate power in latitude and longitude
+            integ = nquad(integrand, ranges, args=[w, itime, I0], opts=opts, full_output=False)
+            pwr = integ[0]
+            # Integrate in frequency (just doing this for efficiency,
+            # can also do it in the nquad call)
+            inp_pwrs[key] = pwr*dw
 
 
 #----------- Step through and fill in the voxels (the main event) ---------------------
@@ -260,7 +261,7 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
     interp_damp= dict()
 
     # Interpolate between frequencies
-    f_weights = (np.arange(0,1,1.0/n_freqs) + (1.0/(2.*n_freqs)))
+    f_weights = (np.arange(0,1,1.0/n_sub_freqs) + (1.0/(2.*n_sub_freqs)))
     for f1, f2 in freq_pairs:
         for f_weight in f_weights:
     #         print f_weight
@@ -289,7 +290,7 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
         print "t = ", t_ind
         for f1, f2 in freq_pairs:
             # n_freqs = np.ceil(np.abs(f2 - f1)/min_fstep)
-            f_weights = (np.arange(0,1,1.0/n_freqs) + (1.0/(2.*n_freqs)))
+            f_weights = (np.arange(0,1,1.0/n_sub_freqs) + (1.0/(2.*n_sub_freqs)))
     #         print f1, f2
             # Per interpolated sub-frequency between guide rays:
             for f_weight in f_weights:
@@ -314,7 +315,7 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
                                             interp_damp[k1][t_ind:t_ind+2], 
                                             interp_damp[k2][t_ind:t_ind+2],
                                             interp_damp[k3][t_ind:t_ind+2]])
-                        pwr = inp_pwrs[(f_center, clat)]
+                        pwr = inp_pwrs[((f1 + f2)/2., clat)]/n_sub_freqs
 
     #                     print t_ind, np.shape(points)
                         avgy = np.mean(points[1,:])
@@ -340,7 +341,7 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
         # Plot individual timesteps (for movies)
         if frame_directory is not None:
             fig, ax = plot_xz(data_cur, xlims,zlims, step_size, clims)
-            fig.suptitle('T=%0.2f s'%(t_ind*dt))
+            fig.suptitle('T=%0.2f s, %0.1f J'%(t_ind*dt, np.sum(data_cur)*pow(step_size*R_E,3)))
             fig.savefig(os.path.join(frame_directory,'frame%d.png'%t_ind),ldpi=300)
             plt.close('all')
 
@@ -435,15 +436,16 @@ if __name__ == "__main__":
 
     datagrid = interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_kp0',
                                 tmax = 15,
-                                flash_lat=45,
-                                flash_lon=77,
+                                flash_lat=40,
+                                flash_lon=76,
                                 dt=0.1,
                                 f_low=200,
                                 f_hi=30000,
                                 max_dist=1500,
                                 xlims = xlims,
                                 zlims = zlims,
-                                clims = [-19, -14],
+                                n_sub_freqs=50,
+                                clims=[-19, -13],
                                 frame_directory='/shared/users/asousa/WIPP/lightning_power_study/outputs/testing'
                                 )
     # datagrid = interp_ray_power()

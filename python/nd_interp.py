@@ -265,7 +265,7 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/ngo_dipole/',
 
 
 #------------ Rotate center_longitude rays to new longitudes ---------------------------
-    logging.info("rotating center longitude rays to offset longitudes")
+    logging.info("Starting interpolation")
     for freq in freqs:
         for lat, lon in pairs_in_range:
             key = (freq, lat, lon)
