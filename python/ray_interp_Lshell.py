@@ -21,10 +21,7 @@ import logging
 import math
 
 
-
-
-
-
+# ----------------------------- Methods -------------------------------
 def haversine_np(lon1, lat1, lon2, lat2):
     """
     Calculate the great circle distance between two points
@@ -43,19 +40,6 @@ def haversine_np(lon1, lat1, lon2, lat2):
     c = 2 * np.arcsin(np.sqrt(a))
     km = 6371 * c
     return km
-
-# Volume of voxel:
-def voxel_volume(points):
-    tri = Delaunay(points.T, qhull_options='QJ')
-    v = 0
-    for row in tri.simplices:
-        a = points[:,row[0]]
-        b = points[:,row[1]]
-        c = points[:,row[2]]
-        d = points[:,row[3]]
-        
-        v += np.abs( np.dot(a - d, np.cross(b-d, c-d)))/6.
-    return v
 
 def rotate_latlon(raypos, itime, dlat, dlon, xf=None):
     if xf is None:
@@ -83,15 +67,9 @@ def voxel_vol_nd(points):
         v += np.abs(np.linalg.det(mat)/math.factorial(n))
     return v
 
-
-
-
-
-
-
 def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_kp0/',
                     flash_lat=40,
-                    flash_lon=76,
+                    mlt = 0,
                     max_dist=1500, 
                     tmax=10,
                     dt=0.1,
@@ -99,11 +77,13 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
                     f_low=200, f_hi=30000,
                     min_fstep = 5000.0,
                     itime = datetime.datetime(2010,1,1,0,0,0),
-                    xlims = [-5, 0],
-                    zlims = [-2.5, 2.5],
                     step_size = 0.02,
                     clims=[1e-19, 1e-14],
                     n_sub_freqs=1,
+                    d_lon = 1,
+                    num_lons = 10,
+                    Llims = [1.2, 5],
+                    L_step = 0.05,
                     frame_directory=None):
 
     # Constants
@@ -111,13 +91,32 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
     D2R = np.pi/180.
     H_IONO_BOTTOM = 1e5
     H_IONO_TOP = 1e6
-
     R_E = 6371e3
+
+
+   
+    Lshells = np.arange(Llims[0], Llims[1], L_step)
+    L_MARGIN = L_step/2.0
+
+
 
     # Coordinate transform tools
     xf = xflib.xflib(lib_path='/shared/users/asousa/WIPP/3dWIPP/python/libxformd.so')
 
     t = np.arange(0,tmax, dt)
+    itime = datetime.datetime(2010,1,1,0,0,0)
+
+    if (0 >= mlt >= 6) or (18 >= mlt >=24):
+        sun = xf.gse2sm([-1,0,0], itime)
+        sun_geomag_midnight = (xf.sm2rllmag(sun, itime))
+        flash_lon = sun_geomag_midnight[2]
+    else:
+        sun = xf.gse2sm([1,0,0], itime)
+        sun_geomag_noon = (xf.sm2rllmag(sun, itime))
+        flash_lon = sun_geomag_noon[2]
+
+    
+    flash_lons = np.arange(flash_lon, flash_lon + (num_lons +1)*d_lon, d_lon)
 
 
     # Find available rays
@@ -133,9 +132,9 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
     center_lat = lats[np.argmin(np.abs(np.array(lats) - flash_lat))]
 
     # Latitude spacing:
-    dl = stats.mode(np.diff(lats))[0][0]
+    dlat = stats.mode(np.diff(lats))[0][0]
 
-    newlons = np.array([flash_lon - dl/2., flash_lon + dl/2.])
+    newlons = np.array([flash_lon - dlat/2., flash_lon + dlat/2.])
     latgrid, longrid = np.meshgrid(lats,newlons)
     latln_pairs = zip(latgrid.ravel(), longrid.ravel())
 
@@ -145,7 +144,7 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
     # Adjacent frequencies to iterate over
     freqs =   [f for f in freqs if f >=f_low and f <= f_hi]
     freq_pairs = zip(freqs[0:-1],freqs[1:])
-
+    
 
 #-------------- Select points within range -----------------------------------------------------------
     for coords in latln_pairs:
@@ -153,7 +152,6 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
         if cur_d < max_dist:
             pairs_in_range.append(coords)
                 
-        
             
 #--------------- Load and interpolate the center longitude entries ------------------------------------
     center_data = dict()
@@ -195,7 +193,7 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
             d['pos'] = rotate_latlon(center_data[key]['pos'],itime, 0, dlon, xf)
             d['damp']=center_data[key]['damp']
             ray_data[newkey] = d
-            
+
 
 # ------------- Calculate input power at each step -------------------------------------
     logging.info("Calculating input power at each cell")
@@ -208,7 +206,7 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
     inp_pwrs = dict()
 
     lat_pairs  = zip(raylats[0:-1],raylats[1:])
-    lon_pairs  = zip(raylons[0:-1],raylons[1:])
+    lon_pairs  = zip(flash_lons[0:-1],flash_lons[1:])
     # print lon_pairs
 
     flash_pos_mag = [1, flash_lat, flash_lon]
@@ -238,76 +236,108 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
         # for f_weight in f_weights:
         # f_center = f_weight*f1 + (1.0-f_weight)*f2
         f_center = (f1 + f2)/2.
+
         for ind, (lat1, lat2) in enumerate(lat_pairs):
-#             print lat1, lat2
+            pwr_vec = np.zeros(len(lon_pairs))
+
             clat = (lat1 + lat2)/2.
             w1 = Hz2Rad*f1
             w2 = Hz2Rad*f2
             w   = Hz2Rad*(f1 + f2)/2.
             dw = np.abs(f1 - f2)*Hz2Rad
+            for lon_ind, lon_pair in enumerate(lon_pairs):
+                ranges = [[lat1, lat2], lon_pair]
+                # Integrate power in latitude and longitude
+                integ = nquad(integrand, ranges, args=[w, itime, I0], opts=opts, full_output=False)
+                pwr = integ[0]
+                pwr_vec[lon_ind] = pwr*dw
+
             key = (f_center, clat)
-            ranges = [[lat1, lat2], lon_pairs[0]]
-            # Integrate power in latitude and longitude
-            integ = nquad(integrand, ranges, args=[w, itime, I0], opts=opts, full_output=False)
-            pwr = integ[0]
-            # Integrate in frequency (just doing this for efficiency,
-            # can also do it in the nquad call)
-            inp_pwrs[key] = pwr*dw
+            inp_pwrs[key] = pwr_vec
 
     logging.info('Total input energy: %0.1f J'%(np.sum(inp_pwrs.values())))
+
+
+# ------------ Set up L-shell output grid --------------------
+# Similar deal, but now let's look along field lines instead of a Cartesian grid
+
+    # n_lsteps = 100
+    R2D = 180./np.pi
+    D2R = np.pi/180.
+
+# ------------------ Set up field lines ----------------------------
+    fieldlines = []
+    for L in Lshells:
+        fieldline = dict()
+        maxlat = np.floor(np.arccos(np.sqrt((R_E + H_IONO_TOP)/R_E/L))*R2D)
+        n_lsteps = int(np.round(2.0*maxlat/dlat))
+        lat_divisions = np.linspace(maxlat, -1.0*maxlat, n_lsteps+1)
+        lat_centers   = lat_divisions[0:-1] - dlat/2.
+    
+        fieldline['lat'] = lat_centers
+        
+        # Radius of tube around field line:
+        clam = np.sin(lat_centers*D2R)
+        slam = np.cos(lat_centers*D2R)
+        clam2 = pow(clam,2.)
+        slam2 = pow(slam,2.)
+        rootTerm = np.sqrt(1.0*3.0*slam2)
+       
+        clam = np.cos(lat_centers*D2R);
+        slam = np.sin(lat_centers*D2R);
+        clam2 = pow(clam,2);
+        slam2 = pow(slam,2);
+        rootTerm = np.sqrt(1+3*slam2);
+
+        radii = clam2*clam / rootTerm * L_MARGIN
+        R_centers = L*clam2
+        
+        fieldline['R'] = R_centers
+        fieldline['xradius']= radii
+        
+        # Approximate each segment as a cylinder:
+        seg_length = R_centers*dlat*D2R
+        seg_vol = np.pi*pow(radii,2.)*seg_length*pow(R_E,3.)  # cubic meters
+
+        fieldline['vol'] = seg_vol
+        fieldline['total_vol'] = np.sum(seg_vol)
+
+        fieldline['x'] = R_centers*clam
+        fieldline['y'] = R_centers*slam
+        
+        fieldline['x_unit_vect'] = (3*clam2 - 2) / rootTerm ;
+        fieldline['y_unit_vect'] = (3*slam*clam) / rootTerm ;
+
+        coords_rllmag = np.vstack([R_centers, lat_centers, np.ones(len(lat_centers))*flash_lon])
+        coords_sm = []
+        for row in coords_rllmag.T:
+            coords_sm.append(xf.rllmag2sm(row, itime))
+        fieldline['pos'] = np.array(coords_sm)
+
+        fieldlines.append(fieldline)
 
 #----------- Step through and fill in the voxels (the main event) ---------------------
     logging.info("Starting interpolation")
 
     # output space
-    xx = np.arange(xlims[0], xlims[1], step_size)
-    zz = np.arange(zlims[0], zlims[1], step_size)
-
-    nx = len(xx) 
-    nz = len(zz)
-
-    data_total = np.zeros([nx, nz])
-    hits = np.zeros([nx, nz])
-
-
-    # interp_pos = dict()
-    # interp_damp= dict()
-
-    # # Interpolate between frequencies
-    # f_weights = (np.arange(0,1,1.0/n_sub_freqs) + (1.0/(2.*n_sub_freqs)))
-    # for f1, f2 in freq_pairs:
-    #     for f_weight in f_weights:
-    # #         print f_weight
-    #         tmax = 0
-    #         for lat, lon in pairs_in_range:
-    #             k1 = (f1, lat, lon)
-    #             k2 = (f2, lat, lon)
-    #             f_cur = f_weight*f1 + (1.0-f_weight)*f2
-    #             k3 = (f_cur, lat, lon)
-    #     #         print ray_data[k1]['nt'], ray_data[k2]['nt']
-    #             tmax_local = min(np.shape(ray_data[k1]['pos'])[1], np.shape(ray_data[k2]['pos'])[1])
-    #             newpos = f_weight*ray_data[k1]['pos'][:,0:tmax_local]  + (1.0 - f_weight)*ray_data[k2]['pos'][:,0:tmax_local]
-    #             newdamp= f_weight*ray_data[k1]['damp'][0:tmax_local] + (1.0 - f_weight)*ray_data[k2]['damp'][0:tmax_local]
-    #             interp_pos[k3] = newpos
-    #             interp_damp[k3]=newdamp
-    # #             print k1, k2, k3
+    nfl = len(fieldlines)
+    nlons = len(flash_lons) - 1
+    nt = len(t)
+    data_total = np.zeros([nfl, nlons, nt])
 
     lon1 = raylons[0]
     lon2 = raylons[1]
-    # Step forward in time as the outer axis, so we can make movie frames:
-    for t_ind in range(len(t)-1):
 
+    for t_ind in np.arange(nt - 1):
         # Per frequency
-        data_cur = np.zeros([nx, nz])
-
-        print "t = ", t_ind
+        data_cur = np.zeros(nfl)
+        logging.info("t = %d"%t_ind)
         for f1, f2 in freq_pairs:
             # Loop over adjacent sets:
             ff = np.arange(0, n_sub_freqs, 1)
             nf = len(ff)
 
-            for ind, (lat1, lat2) in enumerate(lat_pairs):
-                dc = np.zeros([nx, nz, nf])
+            for lat1, lat2 in lat_pairs:
                 k0 = (f1, lat1, lon1)
                 k1 = (f1, lat2, lon1)
                 k2 = (f2, lat1, lon1)
@@ -323,7 +353,6 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
                                  np.shape(ray_data[k2]['pos'])[1], np.shape(ray_data[k3]['pos'])[1],
                                  np.shape(ray_data[k4]['pos'])[1], np.shape(ray_data[k5]['pos'])[1],
                                  np.shape(ray_data[k6]['pos'])[1], np.shape(ray_data[k7]['pos'])[1])
-
                 if (t_ind < tmax_local - 1):
 
                     points_4d = np.hstack([np.vstack([ray_data[k0]['pos'][:,t_ind:t_ind+2],np.zeros([1,2])]),
@@ -337,186 +366,74 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
                 
                     voxel_vol = voxel_vol_nd(points_4d)*pow(R_E,3.)
 
-                    points_2d = np.hstack([np.vstack([ray_data[k4]['pos'][[0,2],t_ind:t_ind+2], np.zeros([1,2])]),
-                                           np.vstack([ray_data[k5]['pos'][[0,2],t_ind:t_ind+2], np.zeros([1,2])]),
-                                           np.vstack([ray_data[k6]['pos'][[0,2],t_ind:t_ind+2], np.ones([1,2])*nf]),
-                                           np.vstack([ray_data[k7]['pos'][[0,2],t_ind:t_ind+2], np.ones([1,2])*nf])])
-
                     damps_2d = np.hstack([ray_data[k0]['damp'][t_ind:t_ind+2],
                                           ray_data[k1]['damp'][t_ind:t_ind+2],
                                           ray_data[k2]['damp'][t_ind:t_ind+2],
                                           ray_data[k3]['damp'][t_ind:t_ind+2]])
-
                     damping_avg = np.mean(damps_2d)
-
-                    pwr = inp_pwrs[(f_center, clat)]  # Avg pwr per frequency bin
-
-                    minx = min(points_2d[0,:])
-                    maxx = max(points_2d[0,:])
-                    minz = min(points_2d[1,:])
-                    maxz = max(points_2d[1,:])
-                    ix = np.where((xx >= minx) & (xx <= maxx))[0]
-                    iz = np.where((zz >= minz) & (zz <= maxz))[0]
-                    ief= np.arange(0, nf)
-                    px, pz, pf = np.meshgrid(ix, iz, ief, indexing='ij')  # in 3d, ij gives xyz, xy gives yxz. dumb.
-                    newpoints = np.vstack([xx[px.ravel()], zz[pz.ravel()], ff[pf.ravel()]])
-
+                    
+                    pwr = inp_pwrs[(f_center, clat)]  # Avg pwrs per frequency bin
+                    
+                    points_2d = np.hstack([np.vstack([ray_data[k4]['pos'][[0,2],t_ind:t_ind+2], np.zeros([1,2])]),
+                                           np.vstack([ray_data[k5]['pos'][[0,2],t_ind:t_ind+2], np.zeros([1,2])]),
+                                           np.vstack([ray_data[k6]['pos'][[0,2],t_ind:t_ind+2], np.ones([1,2])*nf]),
+                                           np.vstack([ray_data[k7]['pos'][[0,2],t_ind:t_ind+2], np.ones([1,2])*nf])])
                     tri = Delaunay(points_2d.T, qhull_options='QJ')
-                    mask = (tri.find_simplex(newpoints.T) >= 0)*1.0
+                    
+                    for fl_ind, fl in enumerate(fieldlines):
+                        ix = np.arange(0,len(fl['pos']))
+                        ief= np.arange(0, nf)    
+                        px, pf = np.meshgrid(ix, ief, indexing='ij')  # in 3d, ij gives xyz, xy gives yxz. dumb.
+                        newpoints = np.hstack([fl['pos'][px.ravel(),:][:,[0,2]], np.atleast_2d(ff[pf.ravel()]).T])
 
-                    mask = mask.reshape([len(ix), len(iz), len(ief)])
-                    total_cells = np.sum(mask)
-                    if (total_cells > 0):  
-                        dc[px,pz,pf] = damping_avg*pwr*mask/voxel_vol
-                        data_cur += np.sum(dc,axis=-1)
+                        mask = (tri.find_simplex(newpoints) >= 0)*1.0
+                        mask = mask.reshape([len(ix), len(ief)])
+                        
+                        total_cells = np.sum(mask)
+                        if (total_cells > 0):
+                            data_total[fl_ind, :, t_ind] += (damping_avg*pwr/voxel_vol)* \
+                                            np.sum(mask*fl['vol'][:,np.newaxis])/fl['total_vol']
+                        
+        print "Energy: ", np.sum(data_total[:, :, t_ind], axis=0)
 
-        plot_xz(data_cur, xlims,zlims,step_size)
-        
-        data_total += data_cur     
-        print "Energy: ", np.sum(np.sum(data_cur))*pow(step_size*R_E,3)
-
-       
-        data_total += data_cur
-
-    #     # Per frequency
-    #     data_cur = np.zeros([nx, nz])
-    #     hits = np.zeros([nx, nz])
-
-    #     print "t = ", t_ind
-    #     for f1, f2 in freq_pairs:
-    #         # n_freqs = np.ceil(np.abs(f2 - f1)/min_fstep)
-    #         f_weights = (np.arange(0,1,1.0/n_sub_freqs) + (1.0/(2.*n_sub_freqs)))
-    # #         print f1, f2
-    #         # Per interpolated sub-frequency between guide rays:
-    #         for f_weight in f_weights:
-    #             f_center = f_weight*f1 + (1.0 - f_weight)*f2
-                
-    #             # Loop over adjacent sets:
-    #             for ind, (lat1, lat2) in enumerate(lat_pairs):
-    #                 k0 = (f_center, lat1, lon1)
-    #                 k1 = (f_center, lat1, lon2)
-    #                 k2 = (f_center, lat2, lon2)
-    #                 k3 = (f_center, lat2, lon1)
-    #                 clat = (lat1 + lat2)/2.
-
-    #                 tmax_local = min(len(interp_damp[k0]),len(interp_damp[k1]),
-    #                                  len(interp_damp[k2]), len(interp_damp[k3]))
-    #                 if t_ind < tmax_local - 1:
-    #                     points = np.hstack([interp_pos[k0][:,t_ind:t_ind+2], 
-    #                                         interp_pos[k1][:,t_ind:t_ind+2], 
-    #                                         interp_pos[k2][:,t_ind:t_ind+2],
-    #                                         interp_pos[k3][:,t_ind:t_ind+2]])
-    #                     damps  = np.hstack([interp_damp[k0][t_ind:t_ind+2], 
-    #                                         interp_damp[k1][t_ind:t_ind+2], 
-    #                                         interp_damp[k2][t_ind:t_ind+2],
-    #                                         interp_damp[k3][t_ind:t_ind+2]])
-    #                     pwr = inp_pwrs[((f1 + f2)/2., clat)]/n_sub_freqs
-
-    # #                     print t_ind, np.shape(points)
-    #                     avgy = np.mean(points[1,:])
-    #                     # This block for Cartesian-gridded output space:
-    #                     minx = min(points[0,:])
-    #                     maxx = max(points[0,:])
-    #                     minz = min(points[2,:])
-    #                     maxz = max(points[2,:])
-    #                     ix = np.where((xx >= minx) & (xx <= maxx))[0]
-    #                     iz = np.where((zz >= minz) & (zz <= maxz))[0]
-    #                     px, pz = np.meshgrid(ix, iz, indexing='ij')  # in 3d, ij gives xyz, xy gives yxz. dumb.
-    #                     newpoints = np.vstack([xx[px.ravel()],np.ones_like(px.ravel())*avgy, zz[pz.ravel()]])
-    #                     damping_avg = np.mean(damps)
-    #                     tri = Delaunay(points.T,qhull_options='QJ')
-    #                     mask = (tri.find_simplex(newpoints.T) >= 0)*1.0
-    #                     mask = mask.reshape([len(ix), len(iz)])
-    #                     total_cells = np.sum(mask)
-
-    #                     if (total_cells > 0):
-    #                         voxel_vol = voxel_volume(points) # Volume in R_e           
-    #                         data_cur[px,pz] += damping_avg*mask*pwr/voxel_vol/pow(R_E,3)  # better volume estimate   
-        
-        # Plot individual timesteps (for movies)
-        if frame_directory is not None:
-            fig, ax = plot_xz(data_cur, xlims,zlims, step_size, clims)
-            fig.suptitle('T=%0.2f s, %0.1f J'%(t_ind*dt, np.sum(data_cur)*pow(step_size*R_E,3)))
-            fig.savefig(os.path.join(frame_directory,'frame%d.png'%t_ind),ldpi=300)
-            plt.close('all')
-
-        data_total += data_cur
-            
     logging.info("finished with interpolation")
     return data_total
-    # plot_xz(data_total, xlims, zlims, step_size)
-
-def plot_xz(data, xlims, zlims, step_size, clims=None):
-    # --------------- Latex Plot Beautification --------------------------
-    fig_width = 6 
-    fig_height = 6
-    fig_size =  [fig_width+1,fig_height+1]
-    params = {'backend': 'ps',
-              'axes.labelsize': 14,
-              'font.size': 14,
-              'legend.fontsize': 14,
-              'xtick.labelsize': 14,
-              'ytick.labelsize': 14,
-              'text.usetex': False,
-              'figure.figsize': fig_size}
-    plt.rcParams.update(params)
-    # --------------- Latex Plot Beautification --------------------------
-
-    # Constants
-    Hz2Rad = 2.*np.pi
-    D2R = np.pi/180.
-    H_IONO_BOTTOM = 1e5
-    H_IONO_TOP = 1e6
-
-    R_E = 6371e3
 
 
-    xx = np.arange(xlims[0], xlims[1], step_size)
-    zz = np.arange(zlims[0], zlims[1], step_size)
-
-    nx = len(xx) 
-    nz = len(zz)
-
-    logdata = np.log10(data)
-    logdata[np.isinf(logdata)] = -100
-
-    maxlog = np.max([logdata])
+# Plot energy density per L-shell vs time:
+def plot_LT(data, tlims, dt, Llims, dl, clims=None):
     
-    # Show about 5 orders of magnitude
-    if clims is None:
-        clims = [maxlog - 5, maxlog]
+    nL, nLons, nt = np.shape(data)
+    
+    Lvec = np.arange(Llims[0], Llims[1], dl)
+    tvec = np.arange(0, nt, 1)*dt
     
     fig, ax = plt.subplots(1,1)
-    # Plot the earth
-    earth = plt.Circle((0,0),1,color='0.5',alpha=1, zorder=100)
-    iono  = plt.Circle((0,0),(R_E + H_IONO_TOP)/R_E, color='w',alpha=0.8, zorder=99)
-    ax.add_patch(earth)   
-    ax.add_patch(iono)
-    
-    p0 = ax.pcolorfast(xx, zz, logdata.T, vmin=clims[0], vmax=clims[1])
-    ax.set_aspect('equal')
-    ax.set_xlim([xx[0],xx[-1]])
-    ax.set_ylim([zz[0],zz[-1]])
+    logdata = np.log10(data[:,0,:])
+    logdata[np.isinf(logdata)] = -100
 
-    fig.tight_layout()
+    if clims is None:
+        maxval = np.ceil(np.max(logdata))
+        clims = [maxval - 5, maxval]
     
-    fig.subplots_adjust(right=0.83)
-    cax = fig.add_axes([0.85,0.14, 0.02, 0.75])
+    print np.shape(data)
+    p0 = ax.pcolorfast(tvec, Lvec, logdata, vmin=clims[0], vmax=clims[1])
+
+    fig.subplots_adjust(right=0.82)
+    cax = fig.add_axes([0.84,0.12, 0.02, 0.75])
 
     cb = plt.colorbar(p0, cax=cax)
-    cb.set_label('avg wave power density')
+    cb.set_label('wave energy density (J/m$^3$)')
     cticks = np.arange(clims[0],clims[1] + 1)
     cb.set_ticks(cticks)
     cticklabels = ['$10^{%d}$'%k for k in cticks]
     cb.set_ticklabels(cticklabels)
 
+    ax.set_ylabel('L shell')
+    ax.set_xlabel('Time (sec)')
+    ax.set_xlim(tlims)
+
     return fig, ax
-
-
-
-
-
-
 
 
 
@@ -525,34 +442,34 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
                         format='[%(levelname)s] %(message)s')  
 
+    Llims = [1.2, 6]
+    L_step = 0.05
 
-    xlims = [-8, 0]
-    zlims = [-4, 4]
 
     datagrid = interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_kp0',
-                                tmax = 15,
+                                tmax = 10,
                                 flash_lat=40,
-                                flash_lon=76,
+                                mlt=0,
                                 dt=0.1,
                                 f_low=200,
-                                f_hi=30000,
-                                max_dist=1500,
-                                xlims = xlims,
-                                zlims = zlims,
+                                f_hi=300,
+                                max_dist=500,
                                 n_sub_freqs=50,
-                                clims=[-19, -13],
-                                frame_directory='/shared/users/asousa/WIPP/lightning_power_study/outputs/testing_newmethod'
+                                Llims=Llims,
+                                L_step=L_step
                                 )
-    # datagrid = interp_ray_power()
 
+    np.save("data_dump.npy",datagrid)
+    fig, ax = plot_LT(datagrid, 
+                tlims=[0,10],
+                dt = 0.1,
+                Llims=Llims,
+                dl = L_step)
 
-    fig, ax = plot_xz(datagrid, 
-                xlims=xlims,
-                zlims=zlims,
-                step_size=0.02)
 
     fig.savefig("test_figure.png",ldpi=300)
     
-            
 
- 
+
+
+
