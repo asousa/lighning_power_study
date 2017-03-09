@@ -3,6 +3,7 @@ matplotlib.use('agg')
 import numpy as np
 import pandas as pd
 import pickle
+import gzip
 from scipy import interpolate
 import matplotlib.pyplot as plt
 import os
@@ -16,7 +17,7 @@ from scipy.spatial import Delaunay
 from scipy.integrate import nquad
 from scipy import stats
 import xflib
-from graf_iono_absorp import total_input_power, MLT, input_power_scaling
+from graf_iono_absorp import total_input_power, lon2MLT, MLT2lon, input_power_scaling
 import logging
 import math
 
@@ -106,16 +107,19 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
     t = np.arange(0,tmax, dt)
     itime = datetime.datetime(2010,1,1,0,0,0)
 
-    if (0 >= mlt >= 6) or (18 >= mlt >=24):
-        sun = xf.gse2sm([-1,0,0], itime)
-        sun_geomag_midnight = (xf.sm2rllmag(sun, itime))
-        flash_lon = sun_geomag_midnight[2]
-    else:
-        sun = xf.gse2sm([1,0,0], itime)
-        sun_geomag_noon = (xf.sm2rllmag(sun, itime))
-        flash_lon = sun_geomag_noon[2]
+    # Select flash longitude corresponding to the input MLT:
+    flash_lon = MLT2lon(itime,mlt,xf)
 
-    
+    # if ((mlt >= 0) and (mlt <= 6)) or ((mlt >= 18) and (mlt <= 24)):
+    #     sun = xf.gse2sm([-1,0,0], itime)
+    #     sun_geomag_midnight = (xf.sm2rllmag(sun, itime))
+    #     flash_lon = sun_geomag_midnight[2]
+    # else:
+    #     sun = xf.gse2sm([1,0,0], itime)
+    #     sun_geomag_noon = (xf.sm2rllmag(sun, itime))
+    #     flash_lon = sun_geomag_noon[2]
+
+    print "flash MLT:",mlt, "Flash longitude:",flash_lon
     flash_lons = np.arange(flash_lon, flash_lon + (num_lons +1)*d_lon, d_lon)
 
 
@@ -218,13 +222,14 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
     opts['epsrel']= 1.5e-8
     opts['limit']= 10
 
-    def integrand(inlat, inlon, inw, itime, I0):
-        mlt = MLT(itime, inlon, xf);
+    def integrand(inlat, inlon, inw, itime, I0, flash_pos_sm_in, itime_in):
+        mlt = lon2MLT(itime, inlon, xf);
+        # print "lon:", inlon, "MLT:",mlt
         tmp_coords = [1, inlat, inlon];
-        x_sm = xf.rllmag2sm(tmp_coords, itime);
+        x_sm = xf.rllmag2sm(tmp_coords, itime_in);
 
-        pwr = input_power_scaling(flash_pos_sm, x_sm, inlat, inw, I0, mlt, xf);
-        return pwr*(R_E + H_IONO_TOP)*D2R*(R_E + H_IONO_TOP)*np.cos(D2R*lat)*D2R
+        pwr = input_power_scaling(flash_pos_sm_in, x_sm, inlat, inw, I0, mlt, xf);
+        return pwr*(R_E + H_IONO_TOP)*D2R*(R_E + H_IONO_TOP)*np.cos(D2R*inlat)*D2R
 
     # pwr_vec = np.zeros(len(lat_pairs))
     inp_pwrs = dict()
@@ -248,7 +253,7 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
             for lon_ind, lon_pair in enumerate(lon_pairs):
                 ranges = [[lat1, lat2], lon_pair]
                 # Integrate power in latitude and longitude
-                integ = nquad(integrand, ranges, args=[w, itime, I0], opts=opts, full_output=False)
+                integ = nquad(integrand, ranges, args=[w, itime, I0, flash_pos_sm, itime], opts=opts, full_output=False)
                 pwr = integ[0]
                 pwr_vec[lon_ind] = pwr*dw
 
@@ -256,6 +261,11 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
             inp_pwrs[key] = pwr_vec
 
     logging.info('Total input energy: %0.1f J'%(np.sum(inp_pwrs.values())))
+
+    with open('input_energy_%d.pkl'%flash_lat,'w') as file:
+        pickle.dump(inp_pwrs, file)
+
+
 
 
 # ------------ Set up L-shell output grid --------------------
@@ -323,7 +333,8 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
     nfl = len(fieldlines)
     nlons = len(flash_lons) - 1
     nt = len(t)
-    data_total = np.zeros([nfl, nlons, nt])
+    n_freq_pairs = len(freq_pairs)
+    data_total = np.zeros([nfl, n_freq_pairs, nlons, nt])
 
     lon1 = raylons[0]
     lon2 = raylons[1]
@@ -332,7 +343,7 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
         # Per frequency
         data_cur = np.zeros(nfl)
         logging.info("t = %d"%t_ind)
-        for f1, f2 in freq_pairs:
+        for freq_ind, (f1, f2) in enumerate(freq_pairs):
             # Loop over adjacent sets:
             ff = np.arange(0, n_sub_freqs, 1)
             nf = len(ff)
@@ -391,22 +402,37 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
                         
                         total_cells = np.sum(mask)
                         if (total_cells > 0):
-                            data_total[fl_ind, :, t_ind] += (damping_avg*pwr/voxel_vol)* \
+                            data_total[fl_ind, freq_ind, :, t_ind] += (damping_avg*pwr/voxel_vol)* \
                                             np.sum(mask*fl['vol'][:,np.newaxis])/fl['total_vol']
                         
-        print "Energy: ", np.sum(data_total[:, :, t_ind], axis=0)
+        # print "Energy: ", np.sum(data_total[:, :, t_ind], axis=0)
 
     logging.info("finished with interpolation")
-    return data_total
+
+    out_data = dict()
+    out_data['data'] = data_total
+    out_data['time'] = t
+    out_data['Lshells'] = Lshells
+    out_data['lons'] = flash_lons
+    out_data['flash_lat'] = flash_lat
+    out_data['I0'] = I0
+    out_data['fmin'] = f_low
+    out_data['fmax'] = f_hi
+    out_data['freq_pairs'] = freq_pairs
+
+
+    return out_data
 
 
 # Plot energy density per L-shell vs time:
-def plot_LT(data, tlims, dt, Llims, dl, clims=None):
+def plot_LT(data_dict, tlims=None, Llims=None, clims=None):
+    data = data_dict['data']
+    Lvec = data_dict['Lshells']
+    tvec = data_dict['time']
+#     nL, nLons, nt = np.shape(data)
     
-    nL, nLons, nt = np.shape(data)
-    
-    Lvec = np.arange(Llims[0], Llims[1], dl)
-    tvec = np.arange(0, nt, 1)*dt
+#     Lvec = np.arange(Llims[0], Llims[1], dl)
+#     tvec = np.arange(0, nt, 1)*dt
     
     fig, ax = plt.subplots(1,1)
     logdata = np.log10(data[:,0,:])
@@ -417,23 +443,86 @@ def plot_LT(data, tlims, dt, Llims, dl, clims=None):
         clims = [maxval - 5, maxval]
     
     print np.shape(data)
-    p0 = ax.pcolorfast(tvec, Lvec, logdata, vmin=clims[0], vmax=clims[1])
+    p0 = ax.pcolorfast(tvec, Lvec, logdata, vmin=clims[0], vmax=clims[1], cmap=plt.get_cmap('jet'))
 
     fig.subplots_adjust(right=0.82)
     cax = fig.add_axes([0.84,0.12, 0.02, 0.75])
 
     cb = plt.colorbar(p0, cax=cax)
-    cb.set_label('wave energy density (J/m$^3$)')
+    cb.set_label('avg wave power density (J/m$^3$)')
     cticks = np.arange(clims[0],clims[1] + 1)
     cb.set_ticks(cticks)
     cticklabels = ['$10^{%d}$'%k for k in cticks]
     cb.set_ticklabels(cticklabels)
 
+
+
     ax.set_ylabel('L shell')
     ax.set_xlabel('Time (sec)')
-    ax.set_xlim(tlims)
+    if tlims is not None:
+        ax.set_xlim(tlims)
 
     return fig, ax
+    
+# plot_LT(data_total,[0, 20],dt, [1.2, 5], L_step)
+
+# 2d plot, longitude vs L-shell:
+def plot_lon(data, lonlims=None, Llims=None, clims=None):
+    # --------------- Latex Plot Beautification --------------------------
+    fig_width = 8 
+    fig_height = 6
+    fig_size =  [fig_width+1,fig_height+1]
+    params = {'backend': 'ps',
+          'axes.labelsize': 14,
+          'font.size': 14,
+          'legend.fontsize': 14,
+          'xtick.labelsize': 14,
+          'ytick.labelsize': 14,
+          'text.usetex': False,
+          'figure.figsize': fig_size}
+    plt.rcParams.update(params)
+    # --------------- Latex Plot Beautification --------------------------
+    
+    data_total = data['data']
+    flash_lons = data['lons']
+    Lshells    = data['Lshells']
+    flash_lon  = flash_lons[0]
+    time = data['time']
+    dt = time[1]-time[0]
+    tmax= time[-1] + dt
+    d_lon = flash_lons[1] - flash_lons[0]
+    num_lons = len(flash_lons)
+
+    lon_max = flash_lons[-1] - flash_lons[0]
+        
+    logdata = np.log10(np.sum(data_total, axis=-1)*dt/tmax)
+    logdata[np.isinf(logdata)] = -1000
+    logdata = np.vstack([np.flipud(logdata[:,1:].T), logdata.T]).T
+
+    maxval = np.ceil(np.max(logdata))
+    clims = [maxval - 3, maxval]
+
+    fig, ax = plt.subplots(1,1)
+    xaxis = np.arange(-lon_max, lon_max + d_lon, d_lon)
+    p0 = ax.pcolorfast(xaxis, Lshells, logdata, vmin=clims[0], vmax=clims[1], cmap=plt.get_cmap('jet'))
+
+    fig.subplots_adjust(right=0.82)
+    cax = fig.add_axes([0.84,0.12, 0.02, 0.75])
+
+    cb = plt.colorbar(p0, cax=cax)
+    cb.set_label('avg wave power density (J/sec/m$^3$)')
+    cticks = np.arange(clims[0],clims[1] + 1)
+    cb.set_ticks(cticks)
+    cticklabels = ['$10^{%d}$'%k for k in cticks]
+    cb.set_ticklabels(cticklabels)
+
+    ax.set_xlabel('Longitude (deg)')
+    ax.set_ylabel('L shell')
+
+    return fig, ax
+
+
+
 
 
 
@@ -445,29 +534,41 @@ if __name__ == "__main__":
     Llims = [1.2, 6]
     L_step = 0.05
 
+    d_lon = 0.5
+    num_lons = 100
 
-    datagrid = interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_kp0',
+    data = interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_kp0',
                                 tmax = 10,
                                 flash_lat=40,
                                 mlt=0,
                                 dt=0.1,
-                                f_low=200,
-                                f_hi=300,
-                                max_dist=500,
+                                f_low=10000,
+                                f_hi=30000,
+                                max_dist=300,
                                 n_sub_freqs=50,
                                 Llims=Llims,
-                                L_step=L_step
+                                L_step=L_step,
+                                d_lon = d_lon,
+                                num_lons = num_lons
                                 )
 
-    np.save("data_dump.npy",datagrid)
-    fig, ax = plot_LT(datagrid, 
-                tlims=[0,10],
-                dt = 0.1,
-                Llims=Llims,
-                dl = L_step)
+    # np.save("data_dump.npy",data)
+    with open('data_dump.pkl','w') as f:
+        pickle.dump(data,f)
+    with gzip.open('data_dump.pklz','wb') as f:
+        pickle.dump(data,f)
 
 
-    fig.savefig("test_figure.png",ldpi=300)
+#   data['data'] has dimensions ([n_fieldlines, n_freq_pairs, n_longitudes, n_times])
+
+    # Sum over frequencies for plotting:
+    data['data'] = np.sum(data['data'], axis=1)
+
+    fig, ax = plot_LT(data)
+    fig.savefig("test_timeseries.png",ldpi=300)
+
+    fig, ax = plot_lon(data)
+    fig.savefig("test_longitude.png",ldpi=300)
     
 
 
