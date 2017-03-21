@@ -207,5 +207,3 @@ double MLT(int itime[2], double lon) {
 
     return fmod(ut_hr + (lon - B1[2])/15.0,  24);
 }
-
-

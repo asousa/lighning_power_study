@@ -39,9 +39,9 @@ logging.basicConfig(level=logging.INFO,
 nProcs = 1.0*comm.Get_size()
 
 # -------------- Simulation params ---------------------
-ray_base ='/shared/users/asousa/WIPP/rays/2d/nightside/' 
-out_base ='/shared/users/asousa/WIPP/lightning_power_study/outputs/nightside/'
-subdirs   = ['gcpm_kp0_flat','gcpm_kp2_flat','gcpm_kp4_flat', 'gcpm_kp6_flat', 'gcpm_kp8_flat']
+ray_base ='/shared/users/asousa/WIPP/rays/2d/dayside/' 
+out_base ='/shared/users/asousa/WIPP/lightning_power_study/outputs/dayside'
+subdirs   = ['gcpm_kp0_flat','gcpm_kp2_flat','gcpm_kp4_flat','gcpm_kp6_flat','gcpm_kp8_flat']
 # ray_dir = '/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_kp0_flat'
 tmax = 20
 dt   = 0.1
@@ -50,8 +50,8 @@ flash_lats = np.arange(15,55,1)
 Llims = [1.2, 8]
 L_step = 0.05
 
-d_lon = 0.2
-num_lons = 100
+d_lon = 0.25
+num_lons = 80
 
 f_low = 200
 f_hi  = 30000
@@ -59,7 +59,8 @@ f_hi  = 30000
 max_dist = 1200
 n_sub_freqs = 50
 
-mlt = 0 # nightside
+# mlt = 0 # nightside
+mlt = 12 # dayside
 
 # out_dir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/nightside/gcpm_kp0'
 # fig_dir = os.path.join(out_dir, 'figures')
@@ -143,28 +144,37 @@ if (rank < len(chunks)):
 
     #   data['data'] has dimensions ([n_fieldlines, n_freq_pairs, n_longitudes, n_times])
 
+        # If you're doing frequencies, these files are huge (several gigs)
         # with open(data_filename,'w') as f:
         #     pickle.dump(data,f)
 
-        with gzip.open(data_filename,'wb') as f:
-            pickle.dump(data,f)
+        # with gzip.open(data_filename,'wb') as f:
+        #     pickle.dump(data,f)
         
 
 
-        # Make the cookie cutter:
-        d = np.sum(data['data'], axis=3)
-        d_new = dict()
-        d_new['data'] = d
-        d_new['Lshells'] = data['Lshells']
-        d_new['lons'] = data['lons']
-        d_new['freq_pairs'] = data['freq_pairs']
+        # # Make the cookie cutter:
+        # d = np.sum(data['data'], axis=3)
+        # d_new = dict()
+        # d_new['data'] = d
+        # d_new['Lshells'] = data['Lshells']
+        # d_new['lons'] = data['lons']
+        # d_new['freq_pairs'] = data['freq_pairs']
 
-        with gzip.open(cookie_cutter_filename,'wb') as f:
-            pickle.dump(d_new,f)
+        # with gzip.open(cookie_cutter_filename,'wb') as f:
+        #     pickle.dump(d_new,f)
 
+        # (fieldline x frequency x longitude)
+        data['spectrum'] = np.sum(data['data'],axis=3)
 
         # Sum over all frequencies (for plots)
+        # (fieldline x longitude x time)
         data['data'] = np.sum(data['data'],axis=1)
+
+        # Save the reduced data
+        with gzip.open(data_filename,'wb') as f:
+            pickle.dump(data,f)
+
 
         # Plot L-shell vs time (all frequencies)
         fig, ax = plot_LT(data)
