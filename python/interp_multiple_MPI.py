@@ -39,22 +39,23 @@ logging.basicConfig(level=logging.INFO,
 nProcs = 1.0*comm.Get_size()
 
 # -------------- Simulation params ---------------------
-ray_base ='/shared/users/asousa/WIPP/rays/2d/dayside/' 
-out_base ='/shared/users/asousa/WIPP/lightning_power_study/outputs/dayside'
-subdirs   = ['gcpm_kp0_flat','gcpm_kp2_flat','gcpm_kp4_flat','gcpm_kp6_flat','gcpm_kp8_flat']
+ray_base ='/shared/users/asousa/WIPP/rays/2d/dayside/mode6/' 
+out_base ='/shared/users/asousa/WIPP/lightning_power_study/outputs/dayside/mode6_v2_redo/'
+# subdirs   = ['kp0','kp2','kp4','kp6','kp8']
+subdirs   = ['kp2']
 # ray_dir = '/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_kp0_flat'
 tmax = 20
 dt   = 0.1
 flash_lats = np.arange(15,55,1)
-
+# flash_lats = [47]
 Llims = [1.2, 8]
 L_step = 0.05
 
 d_lon = 0.25
 num_lons = 80
 
-f_low = 200
-f_hi  = 30000
+f_low = 200 #1120 #960 #600 # 200
+f_hi  = 30000 #1310# 1120 #960 #1310 #600 #2500 #30000
 
 max_dist = 1200
 n_sub_freqs = 50
@@ -126,64 +127,68 @@ if (rank < len(chunks)):
         cookie_cutter_filename = os.path.join(dat_dir,'cookie_%d.pklz'%lat)
         time_filename = os.path.join(fig_dir,'timeseries_%d.png'%lat)
         lon_filename  = os.path.join(fig_dir,'longitude_%d.png'%lat)
+	
+	if os.path.exists(data_filename):
+		print data_filename + " exists!"
+	else:
+		print "doing ", data_filename
+		data = interp_ray_power(ray_dir=ray_dir,
+					tmax = tmax,
+					flash_lat=lat,
+					mlt=mlt,
+					dt=dt,
+					f_low=f_low,
+					f_hi=f_hi,
+					max_dist=max_dist,
+					n_sub_freqs=n_sub_freqs,
+					Llims=Llims,
+					L_step=L_step,
+					d_lon = d_lon,
+					num_lons = num_lons
+					)
 
-        data = interp_ray_power(ray_dir=ray_dir,
-                                tmax = tmax,
-                                flash_lat=lat,
-                                mlt=mlt,
-                                dt=dt,
-                                f_low=f_low,
-                                f_hi=f_hi,
-                                max_dist=max_dist,
-                                n_sub_freqs=n_sub_freqs,
-                                Llims=Llims,
-                                L_step=L_step,
-                                d_lon = d_lon,
-                                num_lons = num_lons
-                                )
+	    #   data['data'] has dimensions ([n_fieldlines, n_freq_pairs, n_longitudes, n_times])
 
-    #   data['data'] has dimensions ([n_fieldlines, n_freq_pairs, n_longitudes, n_times])
+		# If you're doing frequencies, these files are huge (several gigs)
+		# with open(data_filename,'w') as f:
+		#     pickle.dump(data,f)
 
-        # If you're doing frequencies, these files are huge (several gigs)
-        # with open(data_filename,'w') as f:
-        #     pickle.dump(data,f)
-
-        # with gzip.open(data_filename,'wb') as f:
-        #     pickle.dump(data,f)
-        
-
-
-        # # Make the cookie cutter:
-        # d = np.sum(data['data'], axis=3)
-        # d_new = dict()
-        # d_new['data'] = d
-        # d_new['Lshells'] = data['Lshells']
-        # d_new['lons'] = data['lons']
-        # d_new['freq_pairs'] = data['freq_pairs']
-
-        # with gzip.open(cookie_cutter_filename,'wb') as f:
-        #     pickle.dump(d_new,f)
-
-        # (fieldline x frequency x longitude)
-        data['spectrum'] = np.sum(data['data'],axis=3)
-
-        # Sum over all frequencies (for plots)
-        # (fieldline x longitude x time)
-        data['data'] = np.sum(data['data'],axis=1)
-
-        # Save the reduced data
-        with gzip.open(data_filename,'wb') as f:
-            pickle.dump(data,f)
+		# with gzip.open(data_filename,'wb') as f:
+		#     pickle.dump(data,f)
+		
 
 
-        # Plot L-shell vs time (all frequencies)
-        fig, ax = plot_LT(data)
-        fig.suptitle('%d$^o$ latitude'%lat)
-        fig.savefig(time_filename,ldpi=300)
-        plt.close(fig)
+		# # Make the cookie cutter:
+		# d = np.sum(data['data'], axis=3)
+		# d_new = dict()
+		# d_new['data'] = d
+		# d_new['Lshells'] = data['Lshells']
+		# d_new['lons'] = data['lons']
+		# d_new['freq_pairs'] = data['freq_pairs']
 
-        # Plot L-shell vs Longitude (all frequencies)
-        fig, ax = plot_lon(data)
-        fig.suptitle('%d$^o$ latitude'%lat)
-        fig.savefig(lon_filename,ldpi=300)
-        plt.close(fig)
+		# with gzip.open(cookie_cutter_filename,'wb') as f:
+		#     pickle.dump(d_new,f)
+
+		# (fieldline x frequency x longitude)
+		data['spectrum'] = np.sum(data['data'],axis=3)
+
+		# Sum over all frequencies (for plots)
+		# (fieldline x longitude x time)
+		data['data'] = np.sum(data['data'],axis=1)
+
+		# Save the reduced data
+		with gzip.open(data_filename,'wb') as f:
+		    pickle.dump(data,f)
+
+
+		# Plot L-shell vs time (all frequencies)
+		fig, ax = plot_LT(data)
+		fig.suptitle('%d$^o$ latitude'%lat)
+		fig.savefig(time_filename,ldpi=300)
+		plt.close(fig)
+
+		# Plot L-shell vs Longitude (all frequencies)
+		fig, ax = plot_lon(data)
+		fig.suptitle('%d$^o$ latitude'%lat)
+		fig.savefig(lon_filename,ldpi=300)
+		plt.close(fig)

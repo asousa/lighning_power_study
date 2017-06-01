@@ -96,7 +96,7 @@ class GLD_file_tools(object):
     files = os.listdir(os.path.join(self.GLD_root,folder))
     file_list = []
     for file in files:
-     if file.endswith(self.suffix):
+     if file.endswith(self.suffix) and file.startswith(self.prefix):
       #print file
       file_list.append([(datetime.datetime.strptime(file,self.prefix + '-%Y%m%d%H%M%S.dat')),
                           (os.path.join(self.GLD_root,folder,file))])
@@ -129,7 +129,7 @@ class GLD_file_tools(object):
     rows =  []
     times = []
     if filetime is not None:
-      print "section 1"
+      # print "section 1"
       # return None, None
     # else:
 
@@ -147,14 +147,14 @@ class GLD_file_tools(object):
       # Find closest index to target time:
       # print "recursing t_ind"
       t_ind = self.recursive_search_kernel(thefile, t, imin, imax)
-      print t_ind
-      print self.datetime_from_row(self.parse_line(thefile,t_ind))
+      # print t_ind
+      # print self.datetime_from_row(self.parse_line(thefile,t_ind))
       
       # Find closest index to window time:
       # print "recursing t_prev"
       tprev_ind = self.recursive_search_kernel(thefile,tprev,imin,imax)
       # print tprev_ind
-      print self.datetime_from_row(self.parse_line(thefile,tprev_ind))
+      # print self.datetime_from_row(self.parse_line(thefile,tprev_ind))
 
 
       # print "t_ind, tprev_ind (section 1)",t_ind, tprev_ind
@@ -217,7 +217,15 @@ class GLD_file_tools(object):
 
     logging.info(" Found " + str(len(rows)) + " entries between " + str(tprev) + " and " + str(t))
     if len(rows) > 0:
-      return np.asarray(rows), np.asarray(times) 
+      # The searching stuff mostly works, but has issues when the
+      # files are out of order or contain duplicate entries. So here we'll mask off 
+      # everything outside of our interval, just to be sure.
+     
+      # return np.asarray(rows), np.asarray(times)
+      times = np.array(times)
+      rows = np.array(rows)
+      mask = ((times >=tprev) & (times <= t))
+      return rows[mask], times[mask]
     else:
       return None, None
        
@@ -234,7 +242,7 @@ class GLD_file_tools(object):
     y,m,d,H,M,S = l[0:6].astype('int')
     curr_time = datetime.datetime(y,m,d,H,M,S)
     
-    if n > 50:
+    if n > 50: 
       print 'max recursions!'
       return None
     if abs(imin - imax) <= 200:

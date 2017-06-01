@@ -42,8 +42,8 @@ from GLD_file_tools import GLD_file_tools
 
 # Input settings:
 
-pwr_db_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/inp_pwr_db_1deg_bins.pklz'
-output_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/GLDstats'
+pwr_db_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/pwr_db_20deg_spread.pklz'
+output_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/GLDstats_v6'
 fig_path = os.path.join(output_path, 'figures')
 dump_path = os.path.join(output_path,'data')
 
@@ -51,8 +51,8 @@ dump_path = os.path.join(output_path,'data')
 lookback_time = datetime.timedelta(hours=3)
 
 # The range of times we'll do:
-start_day = datetime.datetime(2015,1,1,0,0,0)
-stop_day = datetime.datetime(2016,1,1,0,0,0)
+start_day = datetime.datetime(2014,1,1,0,0,0)
+stop_day = datetime.datetime(2017,1,1,0,0,0)
 
 
 
@@ -106,6 +106,14 @@ def get_coast_mag(itime):
     return coast_lat_mag, coast_lon_mag
 
 def data_grid_at(in_time):
+    # P_A = 5e3
+    # P_B = 1e5
+    # tpeak  = np.log(P_A/P_B)/(P_A - P_B)
+    # Ipeak = np.exp(-P_A*tpeak) - np.exp(-P_B*tpeak)
+    # Ipeak2Io = 1.0/Ipeak
+    Ipeak2Io = 1.2324    # Conversion between peak current and Io
+                         # (i.e., normalize the exponential terms)
+
 #     print np.shape(times_to_do)
     print "loading flashes at ", in_time
     data_grid = []
@@ -121,7 +129,7 @@ def data_grid_at(in_time):
 
             glat = flash[7]
             glon = flash[8]
-            I    = flash[9]
+            I    = flash[9]*Ipeak2Io  # Added after stats_v6
 
             # Get location in geomagnetic coordinates
             mloc = xf.rllgeo2rllmag([1.0, glat, glon], flashtime)
@@ -170,7 +178,7 @@ def analyze_flashes(data_grid, in_time):
         flash_map[int(row[0]), np.mod(int(row[1]), 360)] += 1
         
         # 2d current histogram
-        flash_map[int(row[0]), np.mod(int(row[1]), 360)] += np.abs(row[3]*1e3)
+        cur_map[int(row[0]), np.mod(int(row[1]), 360)] += pow(row[3]*1e3, 2.0)
 
 
 
@@ -184,7 +192,11 @@ def analyze_flashes(data_grid, in_time):
             todo = np.where(nite_bins > 0)
         for latind, lonind in zip(todo[0], todo[1]):
             if (np.abs(gridlats[latind]) >= stencil_lats[0]) & (np.abs(gridlats[latind]) <= stencil_lats[-1]):
-                key = (np.abs(np.round(gridlats[latind])), 0)
+
+                if isday:
+                    key = (np.round(gridlats[latind]), 12)
+                else:
+                    key = (np.round(gridlats[latind]), 0)
                 if key in inp_pwr_dict:
                     stencil = inp_pwr_dict[key]
                     if isday:
@@ -211,11 +223,12 @@ def analyze_flashes(data_grid, in_time):
                     else:
                         pwr_map[latleft:latright, lonleft:lonright] += stencil*pwr
 
-    outdata['pwr_map'] = pwr_map
-    outdata['flash_map'] = flash_map
-    outdata['cur_map'] = cur_map
-    outdata['mlt_hist'] = mlt_hist
-    outdata['in_time'] = in_time
+    # Roll the output data arrays to get [-180, 180] instead of [0, 360]
+    outdata['pwr_map']   = np.roll(pwr_map,  len(gridlons)/2, axis=1)
+    outdata['flash_map'] = np.roll(flash_map,len(gridlons)/2, axis=1)
+    outdata['cur_map']   = np.roll(cur_map , len(gridlons)/2, axis=1)
+    outdata['mlt_hist']  = mlt_hist
+    outdata['in_time']   = in_time
     return outdata
 
 def plot_pwr_data(outdata):
@@ -294,11 +307,18 @@ def plot_pwr_data(outdata):
 
 # ----------------- MAIN RUN BLOCK --------------------------
 # Load input power database:
-with gzip.open('/shared/users/asousa/WIPP/lightning_power_study/outputs/inp_pwr_db_1deg_bins.pklz','rb') as f:
+with gzip.open(pwr_db_path,'rb') as f:
     inp_pwr_dict = pickle.load(f)
 
 tmp = np.array(sorted([k for k in inp_pwr_dict.keys() if not isinstance(k, basestring)]))
 
+# Flip the stencils for southern hemisphere
+for k in tmp:
+    stencil = inp_pwr_dict[tuple(k)]
+    newkey = (-1*k[0], k[1])
+    inp_pwr_dict[newkey] = np.flipud(stencil)
+
+tmp = np.array(sorted([k for k in inp_pwr_dict.keys() if not isinstance(k, basestring)]))
 stencil_lats = np.unique(tmp[:,0]); stencil_MLTs = np.unique(tmp[:,1])
 
 cellsize = inp_pwr_dict['cellsize']
