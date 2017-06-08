@@ -250,6 +250,7 @@ def interp_ray_power(ray_dir=None,
 
     nt = len(t)
     n_freq_pairs = len(freq_pairs)
+    # data_total = np.zeros([NL, NL, n_freq_pairs, nt])
     data_total = np.zeros([NL, NL, nt])
 
     lon1 = raylons[0]
@@ -340,9 +341,8 @@ def interp_ray_power(ray_dir=None,
                 # tmax
             # lat pair
             # data_total[:,:,freq_ind, t_ind] += np.sum(dc, axis=-1)
+            data_total[:,:, t_ind] += np.sum(dc, axis=-1)
         # freq pair
-        data_total[:,:,t_ind] += np.sum(dc, axis=-1)
-        # data_cur += np.sum(dc, axis=-1)
     # time step
 
     outs = dict()
@@ -364,34 +364,34 @@ def interp_ray_power(ray_dir=None,
 
     return outs            
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
 
-    logging.basicConfig(level=logging.INFO,
-                        format='[%(levelname)s] %(message)s')  
+#     logging.basicConfig(level=logging.INFO,
+#                         format='[%(levelname)s] %(message)s')  
 
 
-    data = interp_ray_power(
-                            ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_kp0',
-                            power_dir = '/shared/users/asousa/WIPP/WIPP_stencils/outputs/input_energies/',
-                            tmax = 10,
-                            flash_lat=40,
-                            mlt=0,
-                            dt=0.1,
-                            f_low=1000,
-                            f_hi=5000,
-                            max_dist=120,
-                            n_sub_freqs=50,
-                            Llims=[0,5],
-                            NL = 100,
-                            dlon = 1,
-                            I0 = 10000
-                            )
+#     data = interp_ray_power(
+#                             ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_kp0',
+#                             power_dir = '/shared/users/asousa/WIPP/WIPP_stencils/outputs/input_energies/',
+#                             tmax = 10,
+#                             flash_lat=40,
+#                             mlt=0,
+#                             dt=0.05,
+#                             f_low=1000,
+#                             f_hi=5000,
+#                             max_dist=120,
+#                             n_sub_freqs=50,
+#                             Llims=[0,5],
+#                             NL = 100,
+#                             dlon = 1,
+#                             I0 = 10000
+#                             )
 
-    # # np.save("data_dump.npy",data)
-    # with open('data_dump.pkl','w') as f:
-    #     pickle.dump(data,f)
-    # with gzip.open('data_dump.pklz','wb') as f:
-    #     pickle.dump(data,f)
+#     # # np.save("data_dump.npy",data)
+#     # with open('data_dump.pkl','w') as f:
+#     #     pickle.dump(data,f)
+#     # with gzip.open('data_dump.pklz','wb') as f:
+#     #     pickle.dump(data,f)
 
 
 #   data['data'] has dimensions ([n_fieldlines, n_freq_pairs, n_longitudes, n_times])
