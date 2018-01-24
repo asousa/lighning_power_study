@@ -1,9 +1,12 @@
+from __future__ import division
 from mpi4py import MPI
 import commands
 from partition import partition 
 
 import matplotlib
 matplotlib.use('agg')
+
+
 
 import numpy as np
 import pandas as pd
@@ -43,7 +46,8 @@ from GLD_file_tools import GLD_file_tools
 # Input settings:
 
 pwr_db_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/pwr_db_20deg_spread.pklz'
-output_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/GLDstats_v6'
+# output_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/GLDstats_v6'
+output_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/GLDstats_v8'  # This one to include Io histogram - 6.29.17
 fig_path = os.path.join(output_path, 'figures')
 dump_path = os.path.join(output_path,'data')
 
@@ -51,8 +55,8 @@ dump_path = os.path.join(output_path,'data')
 lookback_time = datetime.timedelta(hours=3)
 
 # The range of times we'll do:
-start_day = datetime.datetime(2014,1,1,0,0,0)
-stop_day = datetime.datetime(2017,1,1,0,0,0)
+start_day = datetime.datetime(2014,8,9,0,0,0)
+stop_day = datetime.datetime(2017,6,1,0,0,0)
 
 
 
@@ -129,8 +133,8 @@ def data_grid_at(in_time):
 
             glat = flash[7]
             glon = flash[8]
+            # I    = flash[9]*Ipeak2Io  # Added after stats_v6
             I    = flash[9]*Ipeak2Io  # Added after stats_v6
-
             # Get location in geomagnetic coordinates
             mloc = xf.rllgeo2rllmag([1.0, glat, glon], flashtime)
 
@@ -146,6 +150,7 @@ def data_grid_at(in_time):
 
 # Output power space:
 def analyze_flashes(data_grid, in_time):
+    Ipeak2Io = 1.2324    # Conversion between peak current and Io
 
     outdata = dict()
     dg2 = np.array(data_grid)
@@ -160,6 +165,10 @@ def analyze_flashes(data_grid, in_time):
     cur_map   = np.zeros([len(gridlats), len(gridlons)])
     pwr_map   = np.zeros([len(gridlats), len(gridlons)])
     mlt_hist, _  = np.histogram(data_grid[:,2], hist_bins)
+
+    # Io_bins = np.linspace(0,1000,101)
+    Io_bins = np.unique(np.round(pow(10,np.linspace(0,3,144))))*Ipeak2Io # 101 log-spaced dividers
+    Io_hist, _ = np.histogram(np.abs(data_grid[:,3]), Io_bins)
 
     # Bin total current by lat and lon
     day_bins = np.zeros([len(gridlats), len(gridlons)])
@@ -181,53 +190,55 @@ def analyze_flashes(data_grid, in_time):
         cur_map[int(row[0]), np.mod(int(row[1]), 360)] += pow(row[3]*1e3, 2.0)
 
 
+# --------- Commenting out the power stencils for this version
+    # day_todo = np.where(day_bins > 0)
+    # nite_todo = np.where(nite_bins > 0)
 
-    day_todo = np.where(day_bins > 0)
-    nite_todo = np.where(nite_bins > 0)
+    # for isday in [False, True]:
+    #     if isday:
+    #         todo = np.where(day_bins > 0)
+    #     else:
+    #         todo = np.where(nite_bins > 0)
+    #     for latind, lonind in zip(todo[0], todo[1]):
+    #         if (np.abs(gridlats[latind]) >= stencil_lats[0]) & (np.abs(gridlats[latind]) <= stencil_lats[-1]):
 
-    for isday in [False, True]:
-        if isday:
-            todo = np.where(day_bins > 0)
-        else:
-            todo = np.where(nite_bins > 0)
-        for latind, lonind in zip(todo[0], todo[1]):
-            if (np.abs(gridlats[latind]) >= stencil_lats[0]) & (np.abs(gridlats[latind]) <= stencil_lats[-1]):
+    #             if isday:
+    #                 key = (np.round(gridlats[latind]), 12)
+    #             else:
+    #                 key = (np.round(gridlats[latind]), 0)
+    #             if key in inp_pwr_dict:
+    #                 stencil = inp_pwr_dict[key]
+    #                 if isday:
+    #                     pwr = day_bins[latind, lonind]
+    #                 else:
+    #                     pwr = nite_bins[latind, lonind]
+    #                 latleft = int(latind - cell_lat_offset)
+    #                 latright = int(latind + cell_lat_offset-1)
+    #                 lonleft = int(lonind - cell_lon_offset)
+    #                 lonright =int(lonind + cell_lon_offset-1)
 
-                if isday:
-                    key = (np.round(gridlats[latind]), 12)
-                else:
-                    key = (np.round(gridlats[latind]), 0)
-                if key in inp_pwr_dict:
-                    stencil = inp_pwr_dict[key]
-                    if isday:
-                        pwr = day_bins[latind, lonind]
-                    else:
-                        pwr = nite_bins[latind, lonind]
-                    latleft = int(latind - cell_lat_offset)
-                    latright = int(latind + cell_lat_offset-1)
-                    lonleft = int(lonind - cell_lon_offset)
-                    lonright =int(lonind + cell_lon_offset-1)
-
-                    if lonleft < 0:
-                        # Wrap around left:
-                        pwr_map[latleft:latright, 0:lonright] += \
-                                stencil[:, np.abs(lonleft):]*pwr
-                        pwr_map[latleft:latright, (len(gridlons) - np.abs(lonleft)):] += \
-                                stencil[:,0:np.abs(lonleft)]*pwr
-                    elif lonright >= len(gridlons):
-                        # wrap around right:
-                        pwr_map[latleft:latright, lonleft:len(gridlons)] += \
-                            stencil[:,0:len(gridlons) - lonleft]*pwr
-                        pwr_map[latleft:latright, 0:np.abs(lonright) - len(gridlons)] += \
-                            stencil[:,len(gridlons) - lonleft:]*pwr
-                    else:
-                        pwr_map[latleft:latright, lonleft:lonright] += stencil*pwr
+    #                 if lonleft < 0:
+    #                     # Wrap around left:
+    #                     pwr_map[latleft:latright, 0:lonright] += \
+    #                             stencil[:, np.abs(lonleft):]*pwr
+    #                     pwr_map[latleft:latright, (len(gridlons) - np.abs(lonleft)):] += \
+    #                             stencil[:,0:np.abs(lonleft)]*pwr
+    #                 elif lonright >= len(gridlons):
+    #                     # wrap around right:
+    #                     pwr_map[latleft:latright, lonleft:len(gridlons)] += \
+    #                         stencil[:,0:len(gridlons) - lonleft]*pwr
+    #                     pwr_map[latleft:latright, 0:np.abs(lonright) - len(gridlons)] += \
+    #                         stencil[:,len(gridlons) - lonleft:]*pwr
+    #                 else:
+    #                     pwr_map[latleft:latright, lonleft:lonright] += stencil*pwr
+    # -----
 
     # Roll the output data arrays to get [-180, 180] instead of [0, 360]
-    outdata['pwr_map']   = np.roll(pwr_map,  len(gridlons)/2, axis=1)
-    outdata['flash_map'] = np.roll(flash_map,len(gridlons)/2, axis=1)
-    outdata['cur_map']   = np.roll(cur_map , len(gridlons)/2, axis=1)
+    # outdata['pwr_map']   = np.roll(pwr_map,  len(gridlons)/2, axis=1)
+    outdata['flash_map'] = np.roll(flash_map,int(len(gridlons)/2), axis=1)
+    outdata['cur_map']   = np.roll(cur_map , int(len(gridlons)/2), axis=1)
     outdata['mlt_hist']  = mlt_hist
+    outdata['Io_hist']   = Io_hist
     outdata['in_time']   = in_time
     return outdata
 
@@ -327,7 +338,7 @@ cell_lon_offset = np.round(inp_pwr_dict['lon_spread']/inp_pwr_dict['cellsize'])
 
 gridlats = np.arange(-90, 90, cellsize)
 gridlons = np.arange(-180, 180, cellsize)
-gridmlts = np.linspace(0,24, 9)
+# gridmlts = np.linspace(0,24, 9)
 
 # Get Kp data
 Ktimes, Kp = load_Kp()
@@ -342,7 +353,7 @@ Kpmtimes = Ktimes[8:]
 
 # lookback_time = np.unique(np.diff(Kpmtimes))[0] # This should be 3 hours
 
-num_cores = multiprocessing.cpu_count()
+# num_cores = multiprocessing.cpu_count()
 
 
 # Lightning data getter
@@ -405,13 +416,15 @@ if (rank < len(chunks)):
     for intime in chunks[rank]:
         datagrid = data_grid_at(intime)
         if datagrid is not None:
+
+            filename = os.path.join(dump_path, intime.strftime('%m_%d_%Y_%H_%M') + '.pklz')
             datum = analyze_flashes(datagrid, intime)
 
             if datum is not None:
-                fig, ax0, ax1, ax2 = plot_pwr_data(datum)
-                figname = os.path.join(fig_path, datum['in_time'].strftime('%m_%d_%Y_%H_%M') +'.png')
-                fig.savefig(figname, ldpi=300)
-                plt.close(fig)
+                # fig, ax0, ax1, ax2 = plot_pwr_data(datum)
+                # figname = os.path.join(fig_path, datum['in_time'].strftime('%m_%d_%Y_%H_%M') +'.png')
+                # fig.savefig(figname, ldpi=300)
+                # plt.close(fig)
 
                 filename = os.path.join(dump_path, datum['in_time'].strftime('%m_%d_%Y_%H_%M') + '.pklz')
                 with gzip.open(filename, 'wb') as f:

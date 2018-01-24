@@ -178,7 +178,7 @@ if (rank < len(chunks)):
 
 		# Save the reduced data
 		with gzip.open(data_filename,'wb') as f:
-		    pickle.dump(data,f)
+		    pickle.dump(data,f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 		# Plot L-shell vs time (all frequencies)
