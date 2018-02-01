@@ -145,7 +145,7 @@ def plot_frame(data, t_ind, clims=None):
 
 flash_lat = int(os.getenv('inlat'))
 kp   = int(os.getenv('kp'))
-outdir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/movie_frames/inlat_%d'%flash_lat
+outdir = '/shared/users/asousa/WIPP/lightning_power_study/outputs/movie_frames_jan_2018/inlat_%d'%flash_lat
 
 if not os.path.exists(outdir):
     os.system('mkdir -p %s'%outdir) 
@@ -153,7 +153,7 @@ if not os.path.exists(outdir):
 print "doing thing for kp = ", kp
 data = interp_ray_power(
         ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/mode6/kp%d/'%kp,
-        power_dir = '/shared/users/asousa/WIPP/WIPP_stencils/outputs/input_energies/',
+        power_dir = '/shared/users/asousa/WIPP//Input_Power_Debugging_2018/outputs/input_energies_1lax0.25lox33f_one_sided/',
         tmax = 20,
         flash_lat=flash_lat,
         mlt=0,
@@ -164,7 +164,7 @@ data = interp_ray_power(
         n_sub_freqs=50,
         Llims=[0,8],
         NL = 400,
-        dlon = 1,
+        dlon = 0.25,
         I0 = 10000
         )
 

@@ -40,19 +40,19 @@ nProcs = 1.0*comm.Get_size()
 
 # -------------- Simulation params ---------------------
 ray_base ='/shared/users/asousa/WIPP/rays/2d/dayside/mode6/' 
-out_base ='/shared/users/asousa/WIPP/lightning_power_study/outputs/dayside/mode6_v2_redo/'
+out_base ='/shared/users/asousa/WIPP/lightning_power_study/outputs/dayside/mode6_v3/'
 # subdirs   = ['kp0','kp2','kp4','kp6','kp8']
-subdirs   = ['kp2']
+subdirs   = ['kp0','kp2','kp4','kp6','kp8']
 # ray_dir = '/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_kp0_flat'
 tmax = 20
 dt   = 0.1
-flash_lats = np.arange(15,55,1)
+flash_lats = np.arange(15,56,1)
 # flash_lats = [47]
 Llims = [1.2, 8]
 L_step = 0.05
 
 d_lon = 0.25
-num_lons = 80
+num_lons = 81
 
 f_low = 200 #1120 #960 #600 # 200
 f_hi  = 30000 #1310# 1120 #960 #1310 #600 #2500 #30000

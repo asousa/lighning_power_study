@@ -42,12 +42,13 @@ from scipy.integrate import nquad
 
 from GLD_file_tools import GLD_file_tools
 
+import aacgmv2
 
 # Input settings:
 
 pwr_db_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/pwr_db_20deg_spread.pklz'
 # output_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/GLDstats_v6'
-output_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/GLDstats_v8'  # This one to include Io histogram - 6.29.17
+output_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/GLDstats_v9_CGM'  # This one to include Io histogram - 6.29.17
 fig_path = os.path.join(output_path, 'figures')
 dump_path = os.path.join(output_path,'data')
 
@@ -58,6 +59,7 @@ lookback_time = datetime.timedelta(hours=3)
 start_day = datetime.datetime(2014,8,9,0,0,0)
 stop_day = datetime.datetime(2017,6,1,0,0,0)
 
+CGM = True # Convert from geo to CGM?
 
 
 # ------------ Start MPI -------------------------------
@@ -129,20 +131,33 @@ def data_grid_at(in_time):
     flashes, flash_times = gld.load_flashes(in_time, lookback_time)
     print np.shape(flashes)
     if flashes is not None:
-        for flash, flashtime in zip(flashes, flash_times):
+        if CGM:
+            cgmlat, cgmlon = aacgmv2.convert(flashes[:,7], flashes[:,8], 5.0*np.ones_like(flashes[:,7]))
+            happy_inds = ~np.isnan(cgmlat)
+            cgmlat = cgmlat[happy_inds]
+            cgmlon = cgmlon[happy_inds]
+            cgmlon[cgmlon < 0] += 360.
+            mlts = [xf.lon2MLT(ft, cl) for (ft, cl) in zip(flash_times[happy_inds], cgmlon)] # Eh, good enough. (This really should be done on unconverted dipole instead of CGM)
 
-            glat = flash[7]
-            glon = flash[8]
-            # I    = flash[9]*Ipeak2Io  # Added after stats_v6
-            I    = flash[9]*Ipeak2Io  # Added after stats_v6
-            # Get location in geomagnetic coordinates
-            mloc = xf.rllgeo2rllmag([1.0, glat, glon], flashtime)
+            I = flashes[happy_inds,9]*Ipeak2Io
 
-            # Get MLT:
-            mlt = xf.lon2MLT(flashtime, mloc[2])
+            data_grid = np.vstack([cgmlat, cgmlon, mlts, I, Kpm*np.ones_like(I), Kp_cur*np.ones_like(I)]).T
+        else:
+            for flash, flashtime in zip(flashes, flash_times):
 
-            data_grid.append([mloc[1], mloc[2], mlt, I, Kpm, Kp_cur])
-        data_grid = np.array(data_grid)
+                glat = flash[7]
+                glon = flash[8]
+                # I    = flash[9]*Ipeak2Io  # Added after stats_v6
+                I    = flash[9]*Ipeak2Io  # Added after stats_v6
+                # Get location in geomagnetic coordinates
+                mloc = xf.rllgeo2rllmag([1.0, glat, glon], flashtime)
+
+                # Get MLT:
+                mlt = xf.lon2MLT(flashtime, mloc[2])
+
+                data_grid.append([mloc[1], mloc[2], mlt, I, Kpm, Kp_cur])
+            data_grid = np.array(data_grid)
+
         return data_grid
     else:
         return None

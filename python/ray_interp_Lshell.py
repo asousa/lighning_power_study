@@ -239,58 +239,60 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
 
     try:
         print "Loading previous powers"
-        with gzip.open('/shared/users/asousa/WIPP/lightning_power_study/outputs/input_powers/input_energy_%d_%d.pklz'%(flash_lat, mlt),'r') as file:
+        # with gzip.open('/shared/users/asousa/WIPP/lightning_power_study/outputs/input_powers/input_energy_%d_%d.pklz'%(flash_lat, mlt),'r') as file:
+        with gzip.open('/shared/users/asousa/WIPP/Input_Power_Debugging_2018/outputs/input_energies_1lax0.25lox33f_one_sided/input_energy_%d_%d.pklz'%(flash_lat, mlt),'r') as file:
             inp_pwrs = pickle.load(file)
 
     except:
-        print "Couldn't load previous db; running from scratch"
-        opts = dict()
-        opts['epsabs']= 1.5e-8
-        opts['epsrel']= 1.5e-8
-        opts['limit']= 10
+        print "Couldn't load previous db! Heck!"
+        # print "Couldn't load previous db; running from scratch"
+        # opts = dict()
+        # opts['epsabs']= 1.5e-8
+        # opts['epsrel']= 1.5e-8
+        # opts['limit']= 10
 
-        def integrand(inlat, inlon, inw, itime, I0, flash_pos_sm_in, itime_in):
-            mlt = lon2MLT(itime, inlon, xf);
-            # print "lon:", inlon, "MLT:",mlt
-            tmp_coords = [1, inlat, inlon];
-            x_sm = xf.rllmag2sm(tmp_coords, itime_in);
+        # def integrand(inlat, inlon, inw, itime, I0, flash_pos_sm_in, itime_in):
+        #     mlt = lon2MLT(itime, inlon, xf);
+        #     # print "lon:", inlon, "MLT:",mlt
+        #     tmp_coords = [1, inlat, inlon];
+        #     x_sm = xf.rllmag2sm(tmp_coords, itime_in);
 
-            pwr = input_power_scaling(flash_pos_sm_in, x_sm, inlat, inw, I0, mlt, xf);
-            return pwr*(R_E + H_IONO_TOP)*D2R*(R_E + H_IONO_TOP)*np.cos(D2R*inlat)*D2R
+        #     pwr = input_power_scaling(flash_pos_sm_in, x_sm, inlat, inw, I0, mlt, xf);
+        #     return pwr*(R_E + H_IONO_TOP)*D2R*(R_E + H_IONO_TOP)*np.cos(D2R*inlat)*D2R
 
-        # pwr_vec = np.zeros(len(lat_pairs))
-        inp_pwrs = dict()
-        for f1, f2 in freq_pairs:
-            logging.info("\t%d, %d"%(f1, f2))
-            # n_freqs = np.ceil(np.abs(f2 - f1)/min_fstep)
-            # f_weights = (np.arange(0,1,1.0/n_sub_freqs) + (1.0/(2.*n_sub_freqs)))
+        # # pwr_vec = np.zeros(len(lat_pairs))
+        # inp_pwrs = dict()
+        # for f1, f2 in freq_pairs:
+        #     logging.info("\t%d, %d"%(f1, f2))
+        #     # n_freqs = np.ceil(np.abs(f2 - f1)/min_fstep)
+        #     # f_weights = (np.arange(0,1,1.0/n_sub_freqs) + (1.0/(2.*n_sub_freqs)))
             
-            # for f_weight in f_weights:
-            # f_center = f_weight*f1 + (1.0-f_weight)*f2
-            f_center = (f1 + f2)/2.
+        #     # for f_weight in f_weights:
+        #     # f_center = f_weight*f1 + (1.0-f_weight)*f2
+        #     f_center = (f1 + f2)/2.
 
-            for ind, (lat1, lat2) in enumerate(lat_pairs):
-                pwr_vec = np.zeros(len(lon_pairs))
+        #     for ind, (lat1, lat2) in enumerate(lat_pairs):
+        #         pwr_vec = np.zeros(len(lon_pairs))
 
-                clat = (lat1 + lat2)/2.
-                w1 = Hz2Rad*f1
-                w2 = Hz2Rad*f2
-                w   = Hz2Rad*(f1 + f2)/2.
-                dw = np.abs(f1 - f2)*Hz2Rad
-                for lon_ind, lon_pair in enumerate(lon_pairs):
-                    ranges = [[lat1, lat2], lon_pair]
-                    # Integrate power in latitude and longitude
-                    integ = nquad(integrand, ranges, args=[w, itime, I0, flash_pos_sm, itime], opts=opts, full_output=False)
-                    pwr = integ[0]
-                    pwr_vec[lon_ind] = pwr*dw
+        #         clat = (lat1 + lat2)/2.
+        #         w1 = Hz2Rad*f1
+        #         w2 = Hz2Rad*f2
+        #         w   = Hz2Rad*(f1 + f2)/2.
+        #         dw = np.abs(f1 - f2)*Hz2Rad
+        #         for lon_ind, lon_pair in enumerate(lon_pairs):
+        #             ranges = [[lat1, lat2], lon_pair]
+        #             # Integrate power in latitude and longitude
+        #             integ = nquad(integrand, ranges, args=[w, itime, I0, flash_pos_sm, itime], opts=opts, full_output=False)
+        #             pwr = integ[0]
+        #             pwr_vec[lon_ind] = pwr*dw
 
-                key = (f_center, clat)
-                inp_pwrs[key] = pwr_vec
+        #         key = (f_center, clat)
+        #         inp_pwrs[key] = pwr_vec
 
-        logging.info('Total input energy: %0.1f J'%(np.sum(inp_pwrs.values())))
+        # logging.info('Total input energy: %0.1f J'%(np.sum(inp_pwrs.values())))
 
-        with gzip.open('/shared/users/asousa/WIPP/lightning_power_study/outputs/input_powers/input_energy_%d_%d.pklz'%(flash_lat, mlt),'w') as file:
-            pickle.dump(inp_pwrs, file)
+        # with gzip.open('/shared/users/asousa/WIPP/lightning_power_study/outputs/input_powers/input_energy_%d_%d.pklz'%(flash_lat, mlt),'w') as file:
+        #     pickle.dump(inp_pwrs, file)
 
 
 
@@ -410,8 +412,12 @@ def interp_ray_power(ray_dir='/shared/users/asousa/WIPP/rays/2d/nightside/gcpm_k
                                           ray_data[k3]['damp'][t_ind:t_ind+2]])
                     damping_avg = np.mean(damps_2d)
                     
-                    pwr = inp_pwrs[(f_center, clat)]  # Avg pwrs per frequency bin
-                    
+                    # pwr = inp_pwrs[(f_center, clat)]*pow(I0,2)  # Avg pwrs per frequency bin  (old style)
+                    # Power vector (from new style, used by stencils etc)
+                    pwr_freq_ind = np.argmin(np.abs(inp_pwrs['cfreqs'] - f_center))
+                    pwr_lat_ind  = np.argmin(np.abs(inp_pwrs['clats'] - clat))
+                    pwr = inp_pwrs['pwr'][pwr_freq_ind, pwr_lat_ind, :]*pow(I0, 2.)
+
                     points_2d = np.hstack([np.vstack([ray_data[k4]['pos'][[0,2],t_ind:t_ind+2], np.zeros([1,2])]),
                                            np.vstack([ray_data[k5]['pos'][[0,2],t_ind:t_ind+2], np.zeros([1,2])]),
                                            np.vstack([ray_data[k6]['pos'][[0,2],t_ind:t_ind+2], np.ones([1,2])*nf]),
