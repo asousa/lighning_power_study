@@ -48,7 +48,7 @@ import aacgmv2
 
 pwr_db_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/pwr_db_20deg_spread.pklz'
 # output_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/GLDstats_v6'
-output_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/GLDstats_v9_CGM'  # This one to include Io histogram - 6.29.17
+output_path = '/shared/users/asousa/WIPP/lightning_power_study/outputs/GLDstats_v9_MAG'  # This one to include Io histogram - 6.29.17
 fig_path = os.path.join(output_path, 'figures')
 dump_path = os.path.join(output_path,'data')
 
@@ -59,7 +59,7 @@ lookback_time = datetime.timedelta(hours=3)
 start_day = datetime.datetime(2014,8,9,0,0,0)
 stop_day = datetime.datetime(2017,6,1,0,0,0)
 
-CGM = True # Convert from geo to CGM?
+CGM = False # Convert from geo to CGM?
 
 
 # ------------ Start MPI -------------------------------
@@ -132,16 +132,21 @@ def data_grid_at(in_time):
     print np.shape(flashes)
     if flashes is not None:
         if CGM:
-            cgmlat, cgmlon = aacgmv2.convert(flashes[:,7], flashes[:,8], 5.0*np.ones_like(flashes[:,7]))
+            pre_cgm_happy_inds = (np.abs(flashes[:,7]) < 90.) & (np.abs(flashes[:,8]) < 360.) 
+            I_pre = flashes[pre_cgm_happy_inds,9]
+            ft_pre = flash_times[pre_cgm_happy_inds]
+            cgmlat, cgmlon = aacgmv2.convert(flashes[pre_cgm_happy_inds,7], flashes[pre_cgm_happy_inds,8], 5.0*np.ones_like(flashes[pre_cgm_happy_inds,7]))
             happy_inds = ~np.isnan(cgmlat)
             cgmlat = cgmlat[happy_inds]
             cgmlon = cgmlon[happy_inds]
             cgmlon[cgmlon < 0] += 360.
-            mlts = [xf.lon2MLT(ft, cl) for (ft, cl) in zip(flash_times[happy_inds], cgmlon)] # Eh, good enough. (This really should be done on unconverted dipole instead of CGM)
+            mlts = [xf.lon2MLT(ft, cl) for (ft, cl) in zip(ft_pre[happy_inds], cgmlon)] # Eh, good enough. (This really should be done on unconverted dipole instead of CGM)
 
-            I = flashes[happy_inds,9]*Ipeak2Io
+            I = I_pre[happy_inds]*Ipeak2Io
 
             data_grid = np.vstack([cgmlat, cgmlon, mlts, I, Kpm*np.ones_like(I), Kp_cur*np.ones_like(I)]).T
+            return data_grid
+
         else:
             for flash, flashtime in zip(flashes, flash_times):
 
@@ -158,7 +163,7 @@ def data_grid_at(in_time):
                 data_grid.append([mloc[1], mloc[2], mlt, I, Kpm, Kp_cur])
             data_grid = np.array(data_grid)
 
-        return data_grid
+            return data_grid
     else:
         return None
 
@@ -414,6 +419,7 @@ gld = GLD_file_tools(GLD_path, prefix='GLD')
 if rank == 0:
     tasklist = Ktimes[(Ktimes > start_day) & (Ktimes <= stop_day)]
     chunks = partition(tasklist, nProcs)
+    print "%d total tasks"%(len(tasklist))
 else:
     tasklist = None
     chunks = None
@@ -429,23 +435,27 @@ if (rank < len(chunks)):
 
 
     for intime in chunks[rank]:
-        datagrid = data_grid_at(intime)
-        if datagrid is not None:
 
-            filename = os.path.join(dump_path, intime.strftime('%m_%d_%Y_%H_%M') + '.pklz')
-            datum = analyze_flashes(datagrid, intime)
+        try:
+            datagrid = data_grid_at(intime)
 
-            if datum is not None:
-                # fig, ax0, ax1, ax2 = plot_pwr_data(datum)
-                # figname = os.path.join(fig_path, datum['in_time'].strftime('%m_%d_%Y_%H_%M') +'.png')
-                # fig.savefig(figname, ldpi=300)
-                # plt.close(fig)
+            if datagrid is not None:
 
-                filename = os.path.join(dump_path, datum['in_time'].strftime('%m_%d_%Y_%H_%M') + '.pklz')
-                with gzip.open(filename, 'wb') as f:
-                    pickle.dump(datum,f)
+                filename = os.path.join(dump_path, intime.strftime('%m_%d_%Y_%H_%M') + '.pklz')
+                datum = analyze_flashes(datagrid, intime)
+                print np.shape(datagrid), "at", filename
+                if datum is not None:
+                    # fig, ax0, ax1, ax2 = plot_pwr_data(datum)
+                    # figname = os.path.join(fig_path, datum['in_time'].strftime('%m_%d_%Y_%H_%M') +'.png')
+                    # fig.savefig(figname, ldpi=300)
+                    # plt.close(fig)
 
+                    filename = os.path.join(dump_path, datum['in_time'].strftime('%m_%d_%Y_%H_%M') + '.pklz')
+                    with gzip.open(filename, 'wb') as f:
+                        pickle.dump(datum,f)
 
+        except:
+            print "Datagrid fucked up at", intime
 
 
 #     datae = Parallel(n_jobs=num_cores)(delayed(job)(t) for t in times_to_do)

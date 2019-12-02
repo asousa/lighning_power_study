@@ -1,3 +1,4 @@
+from __future__ import division
 #import threading
 import time
 #from Queue import Queue
@@ -30,7 +31,14 @@ import fnmatch
 # Version 1.2:  Added try/catch blocks around datetime_from_row
 #               added line[0] == 0 condition for happy rows
 #               (Attempting to bulletproof reads on junky files)
-#               6.14.2016 APS                
+#               6.14.2016 APS       
+#         
+# Version 1.3:  -Added recursion to get_file_at(t)
+#               (in the event that we had files but are
+#               requesting earlier time than all of them,
+#               check the previous day instead.)
+#               -added some int() blocks to catch errors due
+#               to __future__ division
 # ----------------------------------------------------------
 class GLD_file_tools(object):
   def __init__(self,filepath, prefix='GLD'):
@@ -107,7 +115,11 @@ class GLD_file_tools(object):
     # Select only files which start earlier than our target time:
     file_list = [f for f in file_list if t >= f[0]]
 
-    return file_list[-1]  # Last one in the list
+    if len(file_list) == 0:
+      print "checking previous day  (get_file_at...", t, ")"
+      return self.get_file_at(t - datetime.timedelta(days=1))
+    else:
+      return file_list[-1]  # Last one in the list
     # return file_list[-1] # newest file
 
 
@@ -123,6 +135,7 @@ class GLD_file_tools(object):
     # print type(t)
     
     filetime,filepath = self.get_file_at(t)
+    # print filetime, filepath
     
     tprev = t - dt
 
@@ -165,15 +178,16 @@ class GLD_file_tools(object):
           curr_line = self.parse_line(thefile,thefile.tell())
 
           newtime = self.datetime_from_row(curr_line)
+          # print newtime
           # datetime_from_row will return None if line is unhappy
           if newtime is not None:
             rows.append(curr_line)
             times.append(newtime)
       
-      
+      # print rows
       # In the case that tprev runs over the start of the file (asking for flashes at 12:01...)
       # This could be more-elegant but I'm just repeating the previous code
-    print tprev, filetime
+    # print tprev, filetime
     if (filetime is None) or (tprev < filetime):
       # print "section 2"
       filetime,filepath = self.get_file_at(tprev)
@@ -233,7 +247,7 @@ class GLD_file_tools(object):
     ''' Recursively searches thefile (previously open) for the closest entry
         to target_time (datetime object)
     '''
-    imid = imin + ((imax - imin)/2)
+    imid = int(imin + ((imax - imin)/2))
     #imid = ((imax-imin)/2)
     l = self.parse_line(thefile,imid)
     if l is None:
@@ -302,7 +316,7 @@ class GLD_file_tools(object):
   def datetime_from_row(self, row):
     # print row
     y,m,d,H,M,S,n = row[0:7].astype('int')
-    micros = n/1000
+    micros = int(n/1000)
     try:
       return datetime.datetime(y,m,d,H,M,S,micros)
     except:
